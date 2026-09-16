@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      输入桥: 把外部里程计/点云 relay 到 TARE 期望的话题名。
+
+      为什么用 relay 而不是 remap: 保持 /state_estimation 与 /registered_scan
+      这两个话题名存在，RViz 配置、外部工具、录包脚本都依赖它们。
+
+      这 4 个话题在 config/uav/tare_topics.yaml 里也有同名键。
+      有意的重复：relay 是命令行参数（不是 param），必须拿到真实字符串，
+      而 YAML 只能给节点用。改话题名时两处一起改，以 YAML 为准。
+    -->
+
+    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
+    <arg name="external_cloud_topic" default="/cloud_registered"/>
+    <arg name="tare_odom_topic" default="/state_estimation"/>
+    <arg name="tare_cloud_topic" default="/registered_scan"/>
+
+    <node pkg="topic_tools" type="relay" name="uav_state_estimation_relay"
+          args="$(arg external_odom_topic) $(arg tare_odom_topic)" output="screen"/>
+
+    <node pkg="topic_tools" type="relay" name="uav_registered_scan_relay"
+          args="$(arg external_cloud_topic) $(arg tare_cloud_topic)" output="screen"/>
+</launch>

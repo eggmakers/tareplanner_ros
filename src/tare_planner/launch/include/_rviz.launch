@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      RViz（可选）: 加载 vehicle_simulator.rviz。
+    -->
+
+    <arg name="rviz_config" default="$(find tare_planner)/rviz/vehicle_simulator.rviz"/>
+    <arg name="rviz_path_compatibility" default="true"/>
+    <arg name="run_uav_local_planner" default="true"/>
+    <arg name="tare_global_path_topic" default="/sensor_coverage_planner/global_path"/>
+    <arg name="rviz_path_topic" default="/path"/>
+
+    <!-- vehicle_simulator.rviz 期望 /path;
+         走局部规划器时 safe_path_topic 已经发布到 /path，无需 relay。 -->
+    <group if="$(eval arg('rviz_path_compatibility') and not arg('run_uav_local_planner'))">
+        <node pkg="topic_tools" type="relay" name="uav_rviz_global_path_relay"
+              args="$(arg tare_global_path_topic) $(arg rviz_path_topic)" output="screen"/>
+    </group>
+
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="tare_planner_uav_rviz"
+          args="-d $(arg rviz_config)" respawn="true"/>
+</launch>

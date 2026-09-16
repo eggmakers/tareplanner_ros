@@ -1,0 +1,37 @@
+# TARE 节点 —— 任务层参数（唯一真源）
+#
+# 固定高度 / 探索完成判定 / RViz 手动目标导航 / 固定起点规划
+# 加载位置: launch/include/_tare_planner.launch
+
+# ---- 固定高度飞行 ----
+# kFixedFlightHeightRelativeToStart=false 时 kFixedFlightHeight 是 map 系绝对高度;
+# =true 时叠加到第一帧里程计的 z 上。
+kUseFixedFlightHeight: true
+kFixedFlightHeight: 1.5
+kFixedFlightHeightRelativeToStart: false
+
+# 探索流程
+kExplorationWarmupSeconds: 3.0
+# 全局 TSP 需要"持续为空"这么久才判定探索完成，
+# 避免刚收到的扫描还在补目标时被提前锁死。
+kExplorationCompletionConfirmSeconds: 8.0
+
+# ---- RViz 2D Nav Goal 手动导航（在已探索连通图上规划）----
+# 点击时的朝向被忽略：无人机固定高度，朝向由 waypoint bridge 按运动方向给出。
+kEnableManualGoalNavigation: true
+kManualGoalArrivalRadius: 0.35
+kManualGoalStableSeconds: 2.0
+kManualGoalMaxGraphDistance: 2.0
+kManualGoalClearance: 0.75
+kManualGoalVerticalClearance: 0.35
+
+# ---- 固定起点规划（只规划不飞，路径交外部执行）----
+kEnableFixedStartPlanning: true
+
+# ---- 覆盖范围与小目标阈值 ----
+# kSensorRange 是"有效覆盖半径"，不是雷达硬件量程。
+kSensorRange: 5.0
+# 小型室内场景下采样点数比原始地面场景少，沿用 TARE Matterport 室内档位。
+kMinAddPointNumSmall: 8
+kMinAddPointNumBig: 16
+kMinAddFrontierPointNum: 8

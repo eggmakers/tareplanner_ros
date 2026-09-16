@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      MAVROS 位姿桥: /tare_uav/safe_waypoint -> PX4 位置设定点。
+
+      参数默认值在 config/uav/uav_pose_bridge.yaml，
+      这里只做「接线」和「命令行覆盖」。
+    -->
+
+    <!-- 接线（始终生效）-->
+    <arg name="map_frame" default="map"/>
+    <arg name="mavros_namespace" default="/mavros"/>
+    <arg name="uav_pose_topic" default="/mavros/setpoint_position/local"/>
+    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
+    <arg name="input_waypoint_topic" default="/tare_uav/safe_waypoint"/>
+
+    <!-- 命令行覆盖层（空 = 用 YAML）-->
+    <arg name="fixed_flight_height" default=""/>
+    <arg name="fixed_flight_height_relative_to_start" default=""/>
+    <arg name="max_xy_speed" default=""/>
+    <arg name="max_z_speed" default=""/>
+    <arg name="max_xy_accel" default=""/>
+    <arg name="max_z_accel" default=""/>
+    <arg name="max_xy_jerk" default=""/>
+    <arg name="max_z_jerk" default=""/>
+    <arg name="max_yaw_rate" default=""/>
+    <arg name="heading_alignment_enabled" default=""/>
+    <arg name="heading_alignment_tolerance" default=""/>
+    <arg name="takeoff_stabilization_seconds" default=""/>
+    <arg name="start_exploration_after_takeoff" default=""/>
+    <arg name="rc_override_enabled" default=""/>
+    <arg name="rc_override_channel" default=""/>
+    <arg name="rc_override_pwm" default=""/>
+    <arg name="safety_geofence" default=""/>
+    <arg name="safety_geofence_file" default=""/>
+    <arg name="auto_arm" default=""/>
+
+    <node pkg="tare_planner" type="uav_waypoint_bridge.py" name="uav_waypoint_bridge"
+          output="screen">
+
+        <rosparam command="load" file="$(find tare_planner)/config/uav/uav_pose_bridge.yaml"/>
+
+        <!-- 接线覆盖（始终生效）-->
+        <param name="frame_id" value="$(arg map_frame)"/>
+        <param name="input_waypoint_topic" value="$(arg input_waypoint_topic)"/>
+        <param name="output_pose_topic" value="$(arg uav_pose_topic)"/>
+        <param name="odometry_topic" value="$(arg external_odom_topic)"/>
+        <param name="state_topic" value="$(arg mavros_namespace)/state"/>
+        <param name="set_mode_service" value="$(arg mavros_namespace)/set_mode"/>
+        <param name="rc_input_topic" value="$(arg mavros_namespace)/rc/in"/>
+
+        <!-- 命令行覆盖（仅当 arg 非空）-->
+        <param name="fixed_z" type="double" value="$(arg fixed_flight_height)"
+               if="$(eval arg('fixed_flight_height') != '')"/>
+        <param name="fixed_z_relative_to_start" type="bool"
+               value="$(arg fixed_flight_height_relative_to_start)"
+               if="$(eval arg('fixed_flight_height_relative_to_start') != '')"/>
+
+        <param name="max_xy_speed" type="double" value="$(arg max_xy_speed)"
+               if="$(eval arg('max_xy_speed') != '')"/>
+        <param name="max_z_speed" type="double" value="$(arg max_z_speed)"
+               if="$(eval arg('max_z_speed') != '')"/>
+        <param name="max_xy_accel" type="double" value="$(arg max_xy_accel)"
+               if="$(eval arg('max_xy_accel') != '')"/>
+        <param name="max_z_accel" type="double" value="$(arg max_z_accel)"
+               if="$(eval arg('max_z_accel') != '')"/>
+        <param name="max_xy_jerk" type="double" value="$(arg max_xy_jerk)"
+               if="$(eval arg('max_xy_jerk') != '')"/>
+        <param name="max_z_jerk" type="double" value="$(arg max_z_jerk)"
+               if="$(eval arg('max_z_jerk') != '')"/>
+        <param name="max_yaw_rate" type="double" value="$(arg max_yaw_rate)"
+               if="$(eval arg('max_yaw_rate') != '')"/>
+
+        <param name="heading_alignment_enabled" type="bool" value="$(arg heading_alignment_enabled)"
+               if="$(eval arg('heading_alignment_enabled') != '')"/>
+        <param name="heading_alignment_tolerance" type="double"
+               value="$(arg heading_alignment_tolerance)"
+               if="$(eval arg('heading_alignment_tolerance') != '')"/>
+
+        <param name="takeoff_stabilization_seconds" type="double"
+               value="$(arg takeoff_stabilization_seconds)"
+               if="$(eval arg('takeoff_stabilization_seconds') != '')"/>
+        <param name="start_exploration_after_takeoff" type="bool"
+               value="$(arg start_exploration_after_takeoff)"
+               if="$(eval arg('start_exploration_after_takeoff') != '')"/>
+
+        <param name="rc_override_enabled" type="bool" value="$(arg rc_override_enabled)"
+               if="$(eval arg('rc_override_enabled') != '')"/>
+        <param name="rc_override_channel" type="int" value="$(arg rc_override_channel)"
+               if="$(eval arg('rc_override_channel') != '')"/>
+        <param name="rc_override_pwm" type="int" value="$(arg rc_override_pwm)"
+               if="$(eval arg('rc_override_pwm') != '')"/>
+        <param name="geofence_enabled" type="bool" value="$(arg safety_geofence)"
+               if="$(eval arg('safety_geofence') != '')"/>
+        <param name="geofence_file" value="$(arg safety_geofence_file)"
+               if="$(eval arg('safety_geofence_file') != '')"/>
+    </node>
+</launch>

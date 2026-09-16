@@ -1,0 +1,127 @@
+# TARE 节点 —— 算法参数（唯一真源）
+#
+# 固定高度 UAV 探索：保留 TARE 的水平探索逻辑，viewpoint 只用单层 z。
+# 加载位置: launch/include/_tare_planner.launch
+#
+# 注意: 这些是算法调参，一般不需要动。要改请改本文件，不要改 launch。
+
+# ---- 探索/返航行为 ----
+kAutoStart: false
+kRushHome: true
+kRushHomeDist: 5
+kAtHomeDistThreshold: 0.5
+kNoExplorationReturnHome: true
+kUseMomentum: true
+kExtendWayPoint: false
+kExtendWayPointDistanceBig: 3.0
+kExtendWayPointDistanceSmall: 1.0
+kUseLineOfSightLookAheadPoint: true
+# TARE 高层路径 lookahead。★不是★ UAV 跟随器的 lookahead
+# （那个是 local planner 的 lookahead_distance）。
+kLookAheadDistance: 3
+kDirectionChangeCounterThr: 6
+kDirectionNoChangeCounterThr: 5
+kResetWaypointJoystickAxesID: 2
+
+# ---- 地形/碰撞（固定高度飞行，地形相关全部关闭）----
+kUseTerrainHeight: false
+kCheckTerrainCollision: false
+kTerrainCollisionThreshold: 0.5
+kCheckDynamicObstacleCollision: false
+kCollisionFrameCountMax: 3
+
+# ---- keypose 云与降采样 ----
+kKeyposeCloudDwzFilterLeafSize: 0.2
+kKeyposeCloudStackNum: 5
+kSurfaceCloudDwzLeafSize: 0.3
+kCollisionCloudDwzLeafSize: 0.2
+
+# ---- PointCloudManager ----
+kPointCloudRowNum: 50
+kPointCloudColNum: 50
+kPointCloudLevelNum: 30
+kMaxCellPointNum: 100000
+kPointCloudCellSize: 18
+kPointCloudCellHeight: 3.0
+kPointCloudManagerNeighborCellNum: 5
+kCoverCloudZSqueezeRatio: 2.0
+
+# ---- frontier 提取 ----
+kUseFrontier: true
+kFrontierClusterTolerance: 1.0
+kFrontierClusterMinSize: 30
+kUseCoverageBoundaryOnFrontier: false
+kUseCoverageBoundaryOnObjectSurface: false
+kExtractFrontierRangeZ: 2.0
+
+# ---- RollingOccupancyGrid ----
+rolling_occupancy_grid/resolution_x: 0.3
+rolling_occupancy_grid/resolution_y: 0.3
+rolling_occupancy_grid/resolution_z: 0.3
+
+# ---- KeyposeGraph（固定高度飞行，保持平面）----
+keypose_graph/kAddNodeMinDist: 1.0
+keypose_graph/kAddNonKeyposeNodeMinDist: 0.5
+keypose_graph/kAddEdgeConnectDistThr: 3.0
+keypose_graph/kAddEdgeToLastKeyposeDistThr: 3.0
+keypose_graph/kAddEdgeVerticalThreshold: 1.0
+keypose_graph/kAddEdgeCollisionCheckResolution: 0.2
+keypose_graph/kAddEdgeCollisionCheckRadius: 0.75
+keypose_graph/kAddEdgeCollisionCheckPointNumThr: 1
+
+# ---- ViewPointManager（dimension=2 + 单层 z）----
+viewpoint_manager/dimension: 2
+viewpoint_manager/number_x: 50
+viewpoint_manager/number_y: 50
+viewpoint_manager/number_z: 1
+viewpoint_manager/resolution_x: 0.6
+viewpoint_manager/resolution_y: 0.6
+viewpoint_manager/resolution_z: 0.0
+kConnectivityHeightDiffThr: 0.25
+kGreedyViewPointSampleRange: 3
+kLocalPathOptimizationItrMax: 10
+
+# ---- viewpoint 碰撞余量 ----
+# 中心到障碍的余量。UAV 局部保护用同样的 0.75 m 基线 + 动态刹车距离。
+kViewPointCollisionMargin: 0.75
+kViewPointCollisionMarginZPlus: 0.35
+kViewPointCollisionMarginZMinus: 0.35
+kCollisionGridZScale: 1.0
+kCollisionGridResolutionX: 0.2
+kCollisionGridResolutionY: 0.2
+kCollisionGridResolutionZ: 0.2
+kCollisionPointThr: 1
+kLineOfSightStopAtNearestObstacle: true
+kViewPointHeightFromTerrain: 1.5
+kViewPointHeightFromTerrainChangeThreshold: 0.6
+
+# ---- 覆盖判定 ----
+kNeighborRange: 3.0
+kCoverageOcclusionThr: 0.3
+kCoverageDilationRadius: 0.75
+
+# ---- GridWorld ----
+kGridWorldXNum: 121
+kGridWorldYNum: 121
+kGridWorldZNum: 121
+kGridWorldCellHeight: 3.0
+kGridWorldNearbyGridNum: 5
+kCellExploringToCoveredThr: 1
+kCellCoveredToExploringThr: 10
+kCellExploringToAlmostCoveredThr: 10
+kCellAlmostCoveredToExploringThr: 20
+kCellUnknownToExploringThr: 1
+
+# ---- 可视化 ----
+kExploringSubspaceMarkerColorGradientAlpha: true
+kExploringSubspaceMarkerColorMaxAlpha: 0.8
+kExploringSubspaceMarkerColorR: 0.0
+kExploringSubspaceMarkerColorG: 1.0
+kExploringSubspaceMarkerColorB: 0.0
+kExploringSubspaceMarkerColorA: 1.0
+kLocalPlanningHorizonMarkerColorR: 0.0
+kLocalPlanningHorizonMarkerColorG: 1.0
+kLocalPlanningHorizonMarkerColorB: 0.0
+kLocalPlanningHorizonMarkerColorA: 1.0
+kLocalPlanningHorizonMarkerWidth: 0.3
+kLocalPlanningHorizonHeight: 3.0

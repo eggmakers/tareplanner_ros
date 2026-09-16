@@ -1,0 +1,23 @@
+# MAVROS OFFBOARD 管理器（uav_offboard_manager.py）—— 唯一真源
+#
+# 职责: 等设定点流稳定后切 OFFBOARD，可选自动解锁。
+# 加载位置: launch/include/_offboard.launch
+#
+# 实机默认关闭（run_offboard_manager:=false）；仿真 profile 里显式打开。
+# 注意: mavros_namespace 由 launch 的 mavros_namespace arg 统一给出。
+
+# ---- 话题与服务（最终路径 = <mavros_namespace>/...）----
+state_topic: /mavros/state
+setpoint_topic: /mavros/setpoint_position/local
+odometry_topic: /mavros/local_position/odom
+extended_state_topic: /mavros/extended_state
+arming_service: /mavros/cmd/arming
+set_mode_service: /mavros/set_mode
+
+# ---- 模式切换 ----
+offboard_mode: OFFBOARD
+auto_arm: false
+warmup_seconds: 2.0
+required_setpoints: 20
+reassert_offboard_after_mode_exit: false
+require_landed_state: true

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      MAVROS OFFBOARD 管理器（可选）。
+
+      实机默认关闭；只有在需要自动切 OFFBOARD / 自动解锁时才打开。
+      参数默认值在 config/uav/uav_offboard.yaml。
+    -->
+
+    <arg name="mavros_namespace" default="/mavros"/>
+    <arg name="uav_pose_topic" default="/mavros/setpoint_position/local"/>
+    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
+    <!-- 命令行覆盖层（空 = 用 YAML）-->
+    <arg name="auto_arm" default=""/>
+    <arg name="offboard_mode" default=""/>
+
+    <node pkg="tare_planner" type="uav_offboard_manager.py" name="uav_offboard_manager"
+          output="screen">
+
+        <rosparam command="load" file="$(find tare_planner)/config/uav/uav_offboard.yaml"/>
+
+        <!-- 接线覆盖（始终生效）-->
+        <param name="state_topic" value="$(arg mavros_namespace)/state"/>
+        <param name="setpoint_topic" value="$(arg uav_pose_topic)"/>
+        <param name="odometry_topic" value="$(arg external_odom_topic)"/>
+        <param name="extended_state_topic" value="$(arg mavros_namespace)/extended_state"/>
+        <param name="arming_service" value="$(arg mavros_namespace)/cmd/arming"/>
+        <param name="set_mode_service" value="$(arg mavros_namespace)/set_mode"/>
+
+        <!-- 命令行覆盖（仅当 arg 非空）-->
+        <param name="auto_arm" type="bool" value="$(arg auto_arm)"
+               if="$(eval arg('auto_arm') != '')"/>
+        <param name="offboard_mode" value="$(arg offboard_mode)"
+               if="$(eval arg('offboard_mode') != '')"/>
+    </node>
+</launch>

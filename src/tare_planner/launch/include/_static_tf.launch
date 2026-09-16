@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      静态 TF 桥: 面向 FAST-LIO / CMU 风格的坐标系树，
+      给 RViz 和 TARE 可视化补齐 map / camera_init / body / sensor / vehicle / base。
+
+      只有当外部系统没有发布完整 TF 树时才需要打开
+      (tare_uav_fixed_height.launch 的 run_static_tf_bridge:=true)。
+    -->
+
+    <arg name="map_frame" default="map"/>
+    <arg name="camera_init_frame" default="camera_init"/>
+    <arg name="body_frame" default="body"/>
+    <arg name="sensor_frame" default="sensor"/>
+    <arg name="vehicle_frame" default="vehicle"/>
+    <arg name="base_frame" default="base_footprint"/>
+    <!-- 静态安装/对齐修正（弧度）-->
+    <arg name="map_to_camera_init_yaw" default="0.0"/>
+    <arg name="sensor_to_vehicle_yaw" default="0.0"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init"
+          args="0 0 0 $(arg map_to_camera_init_yaw) 0 0 $(arg map_frame) $(arg camera_init_frame)"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="body_to_sensor"
+          args="0 0 0 0 0 0 $(arg body_frame) $(arg sensor_frame)"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="sensor_to_vehicle"
+          args="0 0 0 $(arg sensor_to_vehicle_yaw) 0 0 $(arg sensor_frame) $(arg vehicle_frame)"/>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="vehicle_to_base"
+          args="0 0 0 0 0 0 $(arg vehicle_frame) $(arg base_frame)"/>
+</launch>

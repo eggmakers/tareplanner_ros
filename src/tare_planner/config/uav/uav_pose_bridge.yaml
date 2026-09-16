@@ -1,0 +1,62 @@
+# MAVROS 位姿桥（uav_waypoint_bridge.py）—— 唯一真源
+#
+# 职责: 把 /tare_uav/safe_waypoint 平滑成 PX4 位置设定点，并处理起飞稳定、
+#       RC 接管、可选电子围栏。
+# 加载位置: launch/include/_pose_bridge.launch
+#
+# 注意: frame_id 由 launch 的 map_frame arg 统一给出，不在此文件中。
+
+# ---- 话题与服务 ----
+input_waypoint_topic: /tare_uav/safe_waypoint
+output_pose_topic: /mavros/setpoint_position/local
+odometry_topic: /mavros/local_position/odom
+state_topic: /mavros/state
+set_mode_service: /mavros/set_mode
+
+# ---- 输出节奏 ----
+publish_rate: 20.0
+
+# ---- 朝向 ----
+yaw_from_motion: true
+default_yaw: 0.0
+motion_yaw_min_distance: 0.25
+
+# ---- 定高 ----
+override_z: false
+fixed_z: 1.5
+fixed_z_relative_to_start: false
+
+# ---- 平滑与限幅 ----
+smoothing_enabled: true
+max_xy_speed: 0.35
+max_z_speed: 0.35
+max_xy_accel: 0.20
+max_z_accel: 0.25
+max_xy_jerk: 0.6
+max_z_jerk: 0.5
+max_yaw_rate: 0.35
+heading_alignment_enabled: true
+heading_alignment_tolerance: 0.26
+
+# ---- 起飞稳定：未稳定前不放开探索 ----
+hold_until_armed: true
+takeoff_stabilization_enabled: true
+takeoff_altitude_tolerance: 0.15
+takeoff_stabilization_seconds: 3.0
+start_exploration_after_takeoff: true
+start_exploration_topic: /start_exploration
+
+# ---- 可选电子围栏（命令侧独立保护）----
+geofence_enabled: false
+geofence_file: ''
+
+# ---- RC 接管保护（设成与 PX4 同一个开关）----
+# 注意: PX4 内的开关是主路径，这里是可选的第二道保护。
+rc_override_enabled: false
+rc_input_topic: /mavros/rc/in
+rc_override_channel: 5
+rc_override_pwm: 1900
+rc_override_debounce_seconds: 0.10
+rc_override_mode: POSCTL
+rc_override_retry_interval: 0.50
+rc_override_status_topic: /tare_uav/manual_override
