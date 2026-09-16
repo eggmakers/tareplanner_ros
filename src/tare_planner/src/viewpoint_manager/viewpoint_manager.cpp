@@ -16,17 +16,27 @@ bool ViewPointManagerParameter::ReadParameters(ros::NodeHandle& nh)
 {
   kUseFrontier = misc_utils_ns::getParam<bool>(nh, "kUseFrontier", false);
 
-  dimension_ = 2;
+  dimension_ = misc_utils_ns::getParam<int>(nh, "viewpoint_manager/dimension", 2);
+  if (dimension_ < 2 || dimension_ > 3)
+  {
+    ROS_WARN_STREAM("viewpoint_manager/dimension should be 2 or 3, got " << dimension_ << ". Resetting to 2.");
+    dimension_ = 2;
+  }
 
   kNumber.x() = misc_utils_ns::getParam<int>(nh, "viewpoint_manager/number_x", 80);
   kNumber.y() = misc_utils_ns::getParam<int>(nh, "viewpoint_manager/number_y", 80);
   kNumber.z() = misc_utils_ns::getParam<int>(nh, "viewpoint_manager/number_z", 40);
-  kViewPointNumber = kNumber.x() * kNumber.y() * kNumber.z();
-  kRolloverStepsize = kNumber / 5;
 
   kResolution.x() = misc_utils_ns::getParam<double>(nh, "viewpoint_manager/resolution_x", 0.5);
   kResolution.y() = misc_utils_ns::getParam<double>(nh, "viewpoint_manager/resolution_y", 0.5);
   kResolution.z() = misc_utils_ns::getParam<double>(nh, "viewpoint_manager/resolution_z", 0.5);
+  if (dimension_ == 2)
+  {
+    kNumber.z() = 1;
+    kResolution.z() = 0.0;
+  }
+  kViewPointNumber = kNumber.x() * kNumber.y() * kNumber.z();
+  kRolloverStepsize = kNumber / 5;
   kConnectivityHeightDiffThr = misc_utils_ns::getParam<double>(nh, "kConnectivityHeightDiffThr", 0.25);
   kViewPointCollisionMargin = misc_utils_ns::getParam<double>(nh, "kViewPointCollisionMargin", 0.5);
   kViewPointCollisionMarginZPlus = misc_utils_ns::getParam<double>(nh, "kViewPointCollisionMarginZPlus", 0.5);

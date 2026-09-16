@@ -1,0 +1,44 @@
+# 用户实机/仿真验收命令的参数 (2026-09-16 确认)
+# 逐行 key:=value, 与下面这条命令完全等价:
+#   roslaunch tare_planner tare_uav_fixed_height.launch \
+#     rviz:=true tare_sensor_range:=8.0 \
+#     external_odom_topic:=/mavros/local_position/odom \
+#     external_cloud_topic:=/cloud_registered \
+#     run_input_bridge:=true run_static_tf_bridge:=true run_uav_local_planner:=true \
+#     fixed_flight_height:=1.0 fixed_flight_height_relative_to_start:=true \
+#     local_path_lookahead:=1.8 uav_horizontal_clearance:=0.65 \
+#     local_reaction_time:=0.20 local_max_deceleration:=0.20 \
+#     local_candidate_angle_step_degrees:=10.0 local_candidate_angle_count:=6 \
+#     max_xy_speed:=0.25 max_xy_accel:=0.20 max_xy_jerk:=0.50 \
+#     max_z_speed:=0.15 max_z_accel:=0.10 max_z_jerk:=0.20 max_yaw_rate:=0.40 \
+#     heading_alignment_enabled:=true heading_alignment_tolerance:=0.35 \
+#     takeoff_stabilization_seconds:=5.0 \
+#     run_offboard_manager:=false auto_arm:=false rc_override_enabled:=false
+rviz:=true
+tare_sensor_range:=8.0
+external_odom_topic:=/mavros/local_position/odom
+external_cloud_topic:=/cloud_registered
+run_input_bridge:=true
+run_static_tf_bridge:=true
+run_uav_local_planner:=true
+fixed_flight_height:=1.0
+fixed_flight_height_relative_to_start:=true
+local_path_lookahead:=1.8
+uav_horizontal_clearance:=0.65
+local_reaction_time:=0.20
+local_max_deceleration:=0.20
+local_candidate_angle_step_degrees:=10.0
+local_candidate_angle_count:=6
+max_xy_speed:=0.25
+max_xy_accel:=0.20
+max_xy_jerk:=0.50
+max_z_speed:=0.15
+max_z_accel:=0.10
+max_z_jerk:=0.20
+max_yaw_rate:=0.40
+heading_alignment_enabled:=true
+heading_alignment_tolerance:=0.35
+takeoff_stabilization_seconds:=5.0
+run_offboard_manager:=false
+auto_arm:=false
+rc_override_enabled:=false

@@ -1,0 +1,19 @@
+<launch>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_camera_init" args="0 0 0 0 0 0 map camera_init" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="body_to_sensor" args="0 0 0 0 0 0 body sensor" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="sensor_to_vehicle" args="0 0 0 0 0 0 sensor vehicle" />
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="vehicle_to_base" args="0 0 0 0 0 0 vehicle base_footprint" />
+
+
+    <node pkg="topic_tools" type="relay" name="cloud_relay" args="/cloud_registered /registered_scan" />
+
+    <node pkg="topic_tools" type="relay" name="odom_relay" args="/Odometry /state_estimation" />
+
+     <!--<node pkg="topic_tools" type="relay" name="waypoint_relay" args="/clicked_point /waypoint" /> -->
+
+     <!--<node pkg="topic_tools" type="transform" name="cmd_vel_converter" args="/cmd_vel_stamped /cmd_vel geometry_msgs/Twist 'm.twist'" />-->
+
+</launch>

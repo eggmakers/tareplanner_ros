@@ -1,0 +1,15 @@
+<launch>
+    <arg name="pcd_path" default="/home/wheeltec/FAST_LIO_WS/src/FAST_LIO/PCD/scans202604122130.pcd" />
+
+    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="pcd_to_pointcloud" output="screen">
+        <param name="file_name" value="$(arg pcd_path)" />
+        
+        <param name="frame_id" value="map" />
+        
+        <param name="latch" value="true" />
+        
+        <remap from="cloud_pcd" to="/map_cloud" />
+    </node>
+
+  
+</launch>

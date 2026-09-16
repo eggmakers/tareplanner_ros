@@ -1,0 +1,187 @@
+# Fixed-height UAV exploration profile.
+# This keeps TARE's horizontal exploration logic and locks published waypoints
+# to a constant map-frame height for an external UAV position controller.
+#
+# Runtime wiring is handled by launch/tare_uav_fixed_height.launch:
+#   external_odom_topic  -> /state_estimation
+#   external_cloud_topic -> /registered_scan
+#   /way_point -> uav_local_planner_node -> /tare_uav/safe_waypoint
+#              -> uav_waypoint_bridge.py -> external PX4 pose setpoint
+# Override those launch args instead of editing this file for each simulator.
+
+sub_start_exploration_topic_ : /start_exploration
+sub_terrain_map_topic_ : /terrain_map
+sub_terrain_map_ext_topic_ : /terrain_map_ext
+sub_state_estimation_topic_ : /state_estimation
+sub_registered_scan_topic_ : /registered_scan
+sub_coverage_boundary_topic_ : /sensor_coverage_planner/coverage_boundary
+sub_viewpoint_boundary_topic_ : /navigation_boundary
+sub_nogo_boundary_topic_ : /sensor_coverage_planner/nogo_boundary
+sub_joystick_topic_ : /joy
+sub_reset_waypoint_topic_ : /reset_waypoint
+sub_manual_goal_topic_ : /move_base_simple/goal
+sub_fixed_start_goal_topic_ : /tare_uav/fixed_start_goal
+sub_pause_mission_topic_ : /tare_uav/mission/pause
+sub_resume_exploration_topic_ : /tare_uav/mission/resume_exploration
+sub_cancel_navigation_topic_ : /tare_uav/navigation/cancel
+pub_exploration_finish_topic_ : exploration_finish
+pub_runtime_breakdown_topic_ : runtime_breakdown
+pub_runtime_topic_ : /runtime
+pub_waypoint_topic_ : /way_point
+pub_momentum_activation_count_topic_ : momentum_activation_count
+pub_manual_navigation_path_topic_ : /tare_uav/navigation/path
+pub_manual_navigation_goal_topic_ : /tare_uav/navigation/goal
+pub_mission_mode_topic_ : /tare_uav/mission/mode
+pub_navigation_active_topic_ : /tare_uav/navigation/active
+pub_navigation_reached_topic_ : /tare_uav/navigation/reached
+pub_fixed_start_path_topic_ : /tare_uav/fixed_start_path
+pub_fixed_start_goal_topic_ : /tare_uav/fixed_start_goal_accepted
+pub_fixed_start_status_topic_ : /tare_uav/fixed_start_status
+pub_exploration_start_pose_topic_ : /tare_uav/exploration_start_pose
+
+# The waypoint bridge releases this after the armed vehicle has held the
+# fixed flight height. Scans received during takeoff are not accumulated.
+kAutoStart : false
+kRushHome : true
+kUseTerrainHeight : false
+kCheckTerrainCollision : false
+kExtendWayPoint : false
+kUseLineOfSightLookAheadPoint : true
+kNoExplorationReturnHome : true
+kUseMomentum : true
+kEnableFixedStartPlanning : true
+
+# Fixed-height UAV mode. If kFixedFlightHeightRelativeToStart is false,
+# kFixedFlightHeight is an absolute z in the map frame. If true, it is added
+# to the first received odometry z.
+kUseFixedFlightHeight : true
+kFixedFlightHeight : 1.5
+kFixedFlightHeightRelativeToStart : false
+kExplorationWarmupSeconds : 3.0
+# A transient empty global TSP must persist before exploration is latched done.
+# This keeps frontier extraction active while newly received scans add targets.
+kExplorationCompletionConfirmSeconds : 8.0
+
+# RViz 2D Nav Goal navigation over the connected, already explored keypose graph.
+# The clicked orientation is intentionally ignored; the UAV stays at fixed height
+# and the waypoint bridge keeps the nose aligned with horizontal motion.
+kEnableManualGoalNavigation : true
+kManualGoalArrivalRadius : 0.35
+kManualGoalStableSeconds : 2.0
+kManualGoalMaxGraphDistance : 2.0
+kManualGoalClearance : 0.75
+kManualGoalVerticalClearance : 0.35
+
+kExtendWayPointDistanceBig : 3.0
+kExtendWayPointDistanceSmall : 1.0
+kKeyposeCloudDwzFilterLeafSize : 0.2
+kRushHomeDist : 5
+kAtHomeDistThreshold : 0.5
+kTerrainCollisionThreshold : 0.5
+# TARE high-level path lookahead. This is not the UAV path follower lookahead;
+# local_path_lookahead in the launch file controls each executable local step.
+kLookAheadDistance : 3
+kDirectionChangeCounterThr : 6
+kDirectionNoChangeCounterThr : 5
+kResetWaypointJoystickAxesID : 2
+
+# PlanningEnv
+kUseFrontier : true
+kFrontierClusterTolerance : 1.0
+kFrontierClusterMinSize : 30
+kUseCoverageBoundaryOnFrontier : false
+kUseCoverageBoundaryOnObjectSurface : false
+kExtractFrontierRangeZ : 2.0
+
+# Rolling occupancy grid
+rolling_occupancy_grid/resolution_x : 0.3
+rolling_occupancy_grid/resolution_y : 0.3
+rolling_occupancy_grid/resolution_z : 0.3
+
+kSurfaceCloudDwzLeafSize : 0.3
+kCollisionCloudDwzLeafSize : 0.2
+kKeyposeCloudStackNum : 5
+kPointCloudRowNum : 50
+kPointCloudColNum : 50
+kPointCloudLevelNum : 30
+kMaxCellPointNum : 100000
+kPointCloudCellSize : 18
+kPointCloudCellHeight : 3.0
+kPointCloudManagerNeighborCellNum : 5
+kCoverCloudZSqueezeRatio : 2.0
+
+# KeyposeGraph remains planar for fixed-height flight.
+keypose_graph/kAddNodeMinDist : 1.0
+keypose_graph/kAddNonKeyposeNodeMinDist : 0.5
+keypose_graph/kAddEdgeConnectDistThr : 3.0
+keypose_graph/kAddEdgeToLastKeyposeDistThr : 3.0
+keypose_graph/kAddEdgeVerticalThreshold : 1.0
+keypose_graph/kAddEdgeCollisionCheckResolution : 0.2
+keypose_graph/kAddEdgeCollisionCheckRadius : 0.75
+keypose_graph/kAddEdgeCollisionCheckPointNumThr : 1
+
+# ViewPointManager uses a single z layer for fixed-height UAV exploration.
+viewpoint_manager/dimension : 2
+viewpoint_manager/number_x : 50
+viewpoint_manager/number_y : 50
+viewpoint_manager/number_z : 1
+viewpoint_manager/resolution_x : 0.6
+viewpoint_manager/resolution_y : 0.6
+viewpoint_manager/resolution_z : 0.0
+kConnectivityHeightDiffThr : 0.25
+kGreedyViewPointSampleRange : 3
+kLocalPathOptimizationItrMax : 10
+# Center-to-obstacle clearance used while TARE samples viewpoints. The local
+# UAV guard applies the same 0.75 m baseline plus dynamic braking distance.
+kViewPointCollisionMargin : 0.75
+kViewPointCollisionMarginZPlus : 0.35
+kViewPointCollisionMarginZMinus : 0.35
+kCollisionGridZScale : 1.0
+kCollisionGridResolutionX : 0.2
+kCollisionGridResolutionY : 0.2
+kCollisionGridResolutionZ : 0.2
+kCollisionPointThr : 1
+kLineOfSightStopAtNearestObstacle : true
+kViewPointHeightFromTerrain : 1.5
+kViewPointHeightFromTerrainChangeThreshold : 0.6
+kCheckDynamicObstacleCollision : false
+kCollisionFrameCountMax : 3
+
+# Effective coverage radius, not the LiDAR hardware range. A shorter value
+# requires the UAV to approach surfaces instead of marking them covered afar.
+kSensorRange : 5.0
+kNeighborRange : 3.0
+kCoverageOcclusionThr : 0.3
+kCoverageDilationRadius : 0.75
+
+# Grid World
+kGridWorldXNum : 121
+kGridWorldYNum : 121
+kGridWorldZNum : 121
+kGridWorldCellHeight : 3.0
+kGridWorldNearbyGridNum : 5
+# Small indoor obstacles/frontier clusters contain fewer downsampled points
+# than the original large-scale ground-vehicle scenes. These match TARE's
+# proven Matterport indoor profile and prevent residual work being discarded.
+kMinAddPointNumSmall : 8
+kMinAddPointNumBig : 16
+kMinAddFrontierPointNum : 8
+kCellExploringToCoveredThr : 1
+kCellCoveredToExploringThr: 10
+kCellExploringToAlmostCoveredThr: 10
+kCellAlmostCoveredToExploringThr: 20
+kCellUnknownToExploringThr: 1
+
+# Visualization
+kExploringSubspaceMarkerColorGradientAlpha : true
+kExploringSubspaceMarkerColorMaxAlpha : 0.8
+kExploringSubspaceMarkerColorR : 0.0
+kExploringSubspaceMarkerColorG : 1.0
+kExploringSubspaceMarkerColorB : 0.0
+kExploringSubspaceMarkerColorA : 1.0
+kLocalPlanningHorizonMarkerColorR : 0.0
+kLocalPlanningHorizonMarkerColorG : 1.0
+kLocalPlanningHorizonMarkerColorB : 0.0
+kLocalPlanningHorizonMarkerColorA : 1.0
+kLocalPlanningHorizonMarkerWidth : 0.3
+kLocalPlanningHorizonHeight : 3.0

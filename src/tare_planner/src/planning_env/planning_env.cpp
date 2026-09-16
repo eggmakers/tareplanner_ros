@@ -45,10 +45,11 @@ void PlanningEnvParameters::ReadParameters(ros::NodeHandle& nh)
   double viewpoint_resolution = misc_utils_ns::getParam<double>(nh, "viewpoint_manager/resolution_x", 1.0);
   double local_planning_horizon_half_size = viewpoint_number * viewpoint_resolution / 2;
   double sensor_range = misc_utils_ns::getParam<double>(nh, "kSensorRange", 15);
+  double extract_frontier_range_z = misc_utils_ns::getParam<double>(nh, "kExtractFrontierRangeZ", 2.0);
 
   kExtractFrontierRange.x() = local_planning_horizon_half_size + sensor_range * 2;
   kExtractFrontierRange.y() = local_planning_horizon_half_size + sensor_range * 2;
-  kExtractFrontierRange.z() = 2;
+  kExtractFrontierRange.z() = extract_frontier_range_z;
 }
 
 PlanningEnv::PlanningEnv(ros::NodeHandle nh, ros::NodeHandle nh_private, std::string world_frame_id)
@@ -434,6 +435,11 @@ void PlanningEnv::GetUncoveredArea(const std::shared_ptr<viewpoint_manager_ns::V
 void PlanningEnv::GetVisualizationPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr vis_cloud)
 {
   pointcloud_manager_->GetVisualizationPointCloud(vis_cloud);
+}
+
+void PlanningEnv::PublishPlannerCloud()
+{
+  planner_cloud_->Publish();
 }
 
 void PlanningEnv::PublishStackedCloud()

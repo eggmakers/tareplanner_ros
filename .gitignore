@@ -2,3 +2,5 @@ build/
 ./log/
 .catkin_workspace
 devel/
+.runtime/
+docker/plan_a/blocks_smoke_report.json

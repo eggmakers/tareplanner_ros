@@ -1,0 +1,220 @@
+<launch>
+    <!-- Single-command UAV stack with exclusive mission-source arbitration. -->
+    <arg name="rviz" default="true"/>
+    <arg name="rviz_config" default="$(find tare_planner)/rviz/vehicle_simulator.rviz"/>
+    <arg name="default_mission_mode" default="tare"/>
+
+    <!-- One authoritative height shared by TARE, mux, exporter, replay, and saved-map A*. -->
+    <arg name="fixed_flight_height" default="1.5"/>
+    <arg name="fixed_flight_height_relative_to_start" default="false"/>
+
+    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
+    <arg name="external_cloud_topic" default="/cloud_registered"/>
+    <arg name="run_input_bridge" default="true"/>
+    <arg name="run_static_tf_bridge" default="false"/>
+    <arg name="map_frame" default="map"/>
+    <arg name="map_to_camera_init_yaw" default="0.0"/>
+    <arg name="sensor_to_vehicle_yaw" default="0.0"/>
+
+    <arg name="run_tare_planner" default="true"/>
+    <arg name="run_uav_local_planner" default="true"/>
+    <arg name="local_path_lookahead" default="1.5"/>
+    <arg name="uav_horizontal_clearance" default="0.75"/>
+    <arg name="uav_vertical_clearance" default="0.35"/>
+    <arg name="local_obstacle_range" default="6.0"/>
+    <arg name="local_reaction_time" default="0.20"/>
+    <arg name="local_max_deceleration" default="0.20"/>
+    <arg name="local_candidate_angle_step_degrees" default="15.0"/>
+    <arg name="local_candidate_angle_count" default="6"/>
+
+    <!-- Optional exploration boundary and independent command-side safety fence. -->
+    <arg name="run_navigation_boundary" default="false"/>
+    <arg name="navigation_boundary_file" default="/data/tunnel_boundary.ply"/>
+    <arg name="safety_geofence" default="false"/>
+    <arg name="safety_geofence_file" default=""/>
+
+    <arg name="vehicle_length" default="0.45298"/>
+    <arg name="vehicle_width" default="0.45298"/>
+    <arg name="vehicle_height" default="0.17139"/>
+    <arg name="vehicle_mass" default="3.0"/>
+
+    <arg name="max_xy_speed" default="0.35"/>
+    <arg name="max_xy_accel" default="0.20"/>
+    <arg name="max_xy_jerk" default="0.60"/>
+    <arg name="max_z_speed" default="0.20"/>
+    <arg name="max_z_accel" default="0.15"/>
+    <arg name="max_z_jerk" default="0.30"/>
+    <arg name="max_yaw_rate" default="0.35"/>
+    <arg name="heading_alignment_enabled" default="true"/>
+    <arg name="heading_alignment_tolerance" default="0.26"/>
+    <arg name="takeoff_stabilization_seconds" default="5.0"/>
+    <arg name="start_exploration_after_takeoff" default="true"/>
+
+    <arg name="run_offboard_manager" default="false"/>
+    <arg name="auto_arm" default="false"/>
+    <arg name="rc_override_enabled" default="false"/>
+    <arg name="rc_override_channel" default="5"/>
+    <arg name="rc_override_pwm" default="1900"/>
+
+    <arg name="tare_sensor_range" default="5.0"/>
+    <arg name="exploration_completion_confirm_seconds" default="8.0"/>
+    <arg name="manual_goal_max_graph_distance" default="2.0"/>
+
+    <!-- Route/map handoff. map_file may be the Fast-LIO PCD output. -->
+    <arg name="run_path_exporter" default="true"/>
+    <arg name="run_path_replayer" default="true"/>
+    <arg name="run_bundle_validator" default="false"/>
+    <arg name="run_saved_map_planner" default="false"/>
+    <arg name="bundle_dir" default="$(env HOME)/tare_uav_handoff"/>
+    <arg name="route_file" default="$(arg bundle_dir)/uav_route.json"/>
+    <arg name="map_file" default=""/>
+    <arg name="copy_map_to_bundle" default="true"/>
+    <arg name="saved_map_resolution" default="0.20"/>
+    <arg name="saved_map_path_spacing" default="0.30"/>
+    <arg name="saved_map_goal_snap_radius" default="1.0"/>
+    <arg name="saved_map_use_explicit_start" default="false"/>
+    <arg name="saved_map_offset_x" default="0.0"/>
+    <arg name="saved_map_offset_y" default="0.0"/>
+    <arg name="saved_map_offset_z" default="0.0"/>
+    <arg name="saved_map_offset_yaw" default="0.0"/>
+
+    <include file="$(find tare_planner)/launch/tare_uav_fixed_height.launch">
+        <arg name="rviz" value="$(arg rviz)"/>
+        <arg name="rviz_config" value="$(arg rviz_config)"/>
+        <arg name="run_tare_planner" value="$(arg run_tare_planner)"/>
+        <arg name="fixed_flight_height" value="$(arg fixed_flight_height)"/>
+        <arg name="fixed_flight_height_relative_to_start"
+             value="$(arg fixed_flight_height_relative_to_start)"/>
+        <arg name="external_odom_topic" value="$(arg external_odom_topic)"/>
+        <arg name="external_cloud_topic" value="$(arg external_cloud_topic)"/>
+        <arg name="run_input_bridge" value="$(arg run_input_bridge)"/>
+        <arg name="run_static_tf_bridge" value="$(arg run_static_tf_bridge)"/>
+        <arg name="map_frame" value="$(arg map_frame)"/>
+        <arg name="map_to_camera_init_yaw" value="$(arg map_to_camera_init_yaw)"/>
+        <arg name="sensor_to_vehicle_yaw" value="$(arg sensor_to_vehicle_yaw)"/>
+
+        <arg name="waypoint_topic" value="/tare_uav/source/tare/waypoint"/>
+        <arg name="manual_goal_topic" value="/tare_uav/source/tare/goal"/>
+        <arg name="fixed_start_goal_topic" value="/tare_uav/source/fixed_start/goal"/>
+        <arg name="local_planner_waypoint_topic" value="/tare_uav/command/waypoint"/>
+        <arg name="local_planner_reference_path_topic"
+             value="/tare_uav/command/reference_path"/>
+
+        <arg name="run_uav_local_planner" value="$(arg run_uav_local_planner)"/>
+        <arg name="local_path_lookahead" value="$(arg local_path_lookahead)"/>
+        <arg name="uav_horizontal_clearance" value="$(arg uav_horizontal_clearance)"/>
+        <arg name="uav_vertical_clearance" value="$(arg uav_vertical_clearance)"/>
+        <arg name="local_obstacle_range" value="$(arg local_obstacle_range)"/>
+        <arg name="local_reaction_time" value="$(arg local_reaction_time)"/>
+        <arg name="local_max_deceleration" value="$(arg local_max_deceleration)"/>
+        <arg name="local_candidate_angle_step_degrees"
+             value="$(arg local_candidate_angle_step_degrees)"/>
+        <arg name="local_candidate_angle_count" value="$(arg local_candidate_angle_count)"/>
+        <arg name="run_navigation_boundary" value="$(arg run_navigation_boundary)"/>
+        <arg name="navigation_boundary_file" value="$(arg navigation_boundary_file)"/>
+        <arg name="safety_geofence" value="$(arg safety_geofence)"/>
+        <arg name="safety_geofence_file" value="$(arg safety_geofence_file)"/>
+        <arg name="vehicle_length" value="$(arg vehicle_length)"/>
+        <arg name="vehicle_width" value="$(arg vehicle_width)"/>
+        <arg name="vehicle_height" value="$(arg vehicle_height)"/>
+        <arg name="vehicle_mass" value="$(arg vehicle_mass)"/>
+
+        <arg name="max_xy_speed" value="$(arg max_xy_speed)"/>
+        <arg name="max_xy_accel" value="$(arg max_xy_accel)"/>
+        <arg name="max_xy_jerk" value="$(arg max_xy_jerk)"/>
+        <arg name="max_z_speed" value="$(arg max_z_speed)"/>
+        <arg name="max_z_accel" value="$(arg max_z_accel)"/>
+        <arg name="max_z_jerk" value="$(arg max_z_jerk)"/>
+        <arg name="max_yaw_rate" value="$(arg max_yaw_rate)"/>
+        <arg name="heading_alignment_enabled" value="$(arg heading_alignment_enabled)"/>
+        <arg name="heading_alignment_tolerance" value="$(arg heading_alignment_tolerance)"/>
+        <arg name="takeoff_stabilization_seconds" value="$(arg takeoff_stabilization_seconds)"/>
+        <arg name="start_exploration_after_takeoff" value="$(arg start_exploration_after_takeoff)"/>
+        <arg name="run_offboard_manager" value="$(arg run_offboard_manager)"/>
+        <arg name="auto_arm" value="$(arg auto_arm)"/>
+        <arg name="rc_override_enabled" value="$(arg rc_override_enabled)"/>
+        <arg name="rc_override_channel" value="$(arg rc_override_channel)"/>
+        <arg name="rc_override_pwm" value="$(arg rc_override_pwm)"/>
+        <arg name="tare_sensor_range" value="$(arg tare_sensor_range)"/>
+        <arg name="exploration_completion_confirm_seconds"
+             value="$(arg exploration_completion_confirm_seconds)"/>
+        <arg name="manual_goal_max_graph_distance"
+             value="$(arg manual_goal_max_graph_distance)"/>
+    </include>
+
+    <node pkg="tare_planner" type="uav_mission_mux.py" name="uav_mission_mux"
+          output="screen" required="true">
+        <param name="frame_id" value="$(arg map_frame)"/>
+        <param name="default_mode" value="$(arg default_mission_mode)"/>
+        <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+        <param name="fixed_flight_height_relative_to_start" type="bool"
+               value="$(arg fixed_flight_height_relative_to_start)"/>
+        <param name="odometry_topic" value="/state_estimation"/>
+    </node>
+
+    <group if="$(arg run_path_exporter)">
+        <node pkg="tare_planner" type="uav_path_exporter.py" name="uav_path_exporter"
+              output="screen">
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="route_file" value="$(arg route_file)"/>
+            <param name="map_file" value="$(arg map_file)"/>
+            <param name="copy_map" type="bool" value="$(arg copy_map_to_bundle)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="vehicle_length" type="double" value="$(arg vehicle_length)"/>
+            <param name="vehicle_width" type="double" value="$(arg vehicle_width)"/>
+            <param name="vehicle_height" type="double" value="$(arg vehicle_height)"/>
+            <param name="vehicle_mass" type="double" value="$(arg vehicle_mass)"/>
+            <param name="horizontal_clearance" type="double" value="$(arg uav_horizontal_clearance)"/>
+            <param name="vertical_clearance" type="double" value="$(arg uav_vertical_clearance)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_path_replayer)">
+        <node pkg="tare_planner" type="uav_path_replayer.py" name="uav_path_replayer"
+              output="screen">
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="route_file" value="$(arg route_file)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="lookahead_distance" type="double" value="$(arg local_path_lookahead)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_bundle_validator)">
+        <node pkg="tare_planner" type="uav_bundle_validator.py" name="uav_bundle_validator"
+              output="screen" required="true">
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="require_map" type="bool" value="$(arg run_saved_map_planner)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_saved_map_planner)">
+        <node pkg="tare_planner" type="uav_saved_map_planner_node"
+              name="uav_saved_map_planner" output="screen" required="true">
+            <param name="map_file" value="$(arg map_file)"/>
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="resolution" type="double" value="$(arg saved_map_resolution)"/>
+            <param name="path_spacing" type="double" value="$(arg saved_map_path_spacing)"/>
+            <param name="goal_snap_radius" type="double" value="$(arg saved_map_goal_snap_radius)"/>
+            <param name="use_explicit_start" type="bool" value="$(arg saved_map_use_explicit_start)"/>
+            <param name="horizontal_clearance" type="double" value="$(arg uav_horizontal_clearance)"/>
+            <param name="vertical_clearance" type="double" value="$(arg uav_vertical_clearance)"/>
+            <param name="vehicle_height" type="double" value="$(arg vehicle_height)"/>
+            <param name="map_offset_x" type="double" value="$(arg saved_map_offset_x)"/>
+            <param name="map_offset_y" type="double" value="$(arg saved_map_offset_y)"/>
+            <param name="map_offset_z" type="double" value="$(arg saved_map_offset_z)"/>
+            <param name="map_offset_yaw" type="double" value="$(arg saved_map_offset_yaw)"/>
+        </node>
+    </group>
+</launch>

@@ -15,12 +15,15 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
   nav_msgs
   roscpp
   rospy
   sensor_msgs
   std_msgs
   pcl_ros
+  pcl_conversions
+  tf
 )
 
 find_package(PCL REQUIRED)
@@ -29,7 +32,7 @@ find_package(Eigen3 REQUIRED)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES coverage_planner
-  CATKIN_DEPENDS nav_msgs roscpp rospy sensor_msgs std_msgs pcl_ros 
+  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy sensor_msgs std_msgs pcl_ros pcl_conversions tf
 #  DEPENDS system_lib
 )
 
@@ -125,6 +128,32 @@ add_executable(tare_planner_node src/tare_planner_node/tare_planner_node.cpp)
 add_dependencies(tare_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} )
 target_link_libraries(tare_planner_node ${catkin_LIBRARIES} sensor_coverage_planner_ground)
 
+add_executable(uav_local_planner_node src/uav_local_planner/uav_local_planner_node.cpp)
+add_dependencies(uav_local_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(uav_local_planner_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+add_executable(uav_saved_map_planner_node src/uav_saved_map_planner/uav_saved_map_planner_node.cpp)
+add_dependencies(uav_saved_map_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(uav_saved_map_planner_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+catkin_install_python(PROGRAMS
+  scripts/airsim_lidar_bridge.py
+  scripts/airsim_tunnel_scene.py
+  scripts/blocks_integrated_closed_loop_test.py
+  scripts/blocks_manual_navigation_test.py
+  scripts/blocks_smoke_test.py
+  scripts/uav_offboard_manager.py
+  scripts/uav_mode_command.py
+  scripts/uav_exploration_viewer.py
+  scripts/uav_waypoint_bridge.py
+  scripts/uav_bundle_validator.py
+  scripts/uav_mission_command.py
+  scripts/uav_mission_mux.py
+  scripts/uav_path_exporter.py
+  scripts/uav_path_replayer.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 
 #############
 ## Install ##
@@ -133,12 +162,25 @@ target_link_libraries(tare_planner_node ${catkin_LIBRARIES} sensor_coverage_plan
 install(DIRECTORY launch/
         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
         )
+install(DIRECTORY config/
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config
+        )
 install(DIRECTORY rviz/
         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/rviz
         )
+
+install(TARGETS uav_saved_map_planner_node
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 #############
 ## Testing ##
 #############
 
-
+if(CATKIN_ENABLE_TESTING)
+  add_executable(test_uav_local_planner_core test/test_uav_local_planner_core.cpp)
+  add_test(NAME test_uav_local_planner_core COMMAND test_uav_local_planner_core)
+  add_test(NAME test_uav_manual_navigation_profile
+           COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_uav_manual_navigation_profile.py)
+  add_test(NAME test_uav_handoff_profile
+           COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_uav_handoff_profile.py)
+endif()

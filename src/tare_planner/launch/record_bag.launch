@@ -2,5 +2,5 @@
     <arg name="bag_path" default="Desktop"/>
     <arg name="bag_name_prefix" default="exploration"/>
     <node pkg="rosbag" type="record" name="rosbag_record_tare_planner"
-          args="record -o $(env HOME)/$(arg bag_path)/$(arg bag_name_prefix) -e '/sensor_coverage_planner/(.*)' /tf /registered_scan /state_estimation /state_estimation_at_scan /velodyne_cloud_registered /integrated_to_init /aft_mapped_to_init /way_point /runtime"/>
+          args="record -o $(env HOME)/$(arg bag_path)/$(arg bag_name_prefix) -e '/sensor_coverage_planner/(.*)' /tf /tf_static /registered_scan /state_estimation /state_estimation_at_scan /velodyne_cloud_registered /integrated_to_init /aft_mapped_to_init /way_point /move_base_simple/goal /tare_uav/safe_waypoint /tare_uav/command_velocity /tare_uav/mission/mode /tare_uav/mission/pause /tare_uav/mission/resume_exploration /tare_uav/navigation/path /tare_uav/navigation/goal /tare_uav/navigation/active /tare_uav/navigation/reached /tare_uav/navigation/cancel /tare_uav/local_planner/blocked /tare_uav/local_planner/minimum_clearance /tare_uav/local_planner/status /path /free_paths /added_obstacles /trajectory /mavros/state /mavros/local_position/odom /mavros/setpoint_position/local /runtime"/>
 </launch>

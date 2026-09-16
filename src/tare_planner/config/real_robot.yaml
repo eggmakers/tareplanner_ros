@@ -1,0 +1,385 @@
+# ==========================================
+# TARE Planner 真车部署配置文件
+# ==========================================
+# 作用：定义 TARE 全局规划器的所有参数
+# 包含：话题名称、探索策略、空间管理、视点管理、网格世界参数
+
+# ==========================================
+# 1. 核心话题对接
+# 定义 TARE 规划器订阅和发布的 ROS 话题名称
+# 必须与实际运行的节点发布的话题名称一致
+# ==========================================
+
+# 订阅话题：探索触发信号。发布 std_msgs/Bool(true) 开始探索
+sub_start_exploration_topic_ : /start_exploration
+
+# 订阅话题：地形地图（由 TerrainAnalysis 节点发布）
+# 用于判断地面可通行性和障碍物高度
+sub_terrain_map_topic_ : /terrain_map
+
+# 订阅话题：扩展地形地图（由 TerrainAnalysisExt 节点发布）
+# 提供更精细的地形坡度和连通性信息
+sub_terrain_map_ext_topic_ : /terrain_map_ext
+
+# 订阅话题：机器人位姿估计（由 FAST-LIO 经 Bridge 中转后发布）
+# 格式：nav_msgs/Odometry，包含位置 (x,y,z) 和朝向 (roll,pitch,yaw)
+sub_state_estimation_topic_ : /state_estimation
+
+# 订阅话题：已配准的点云（由 FAST-LIO 经 Bridge 中转后发布）
+# 格式：sensor_msgs/PointCloud2，坐标系为 world/map
+sub_registered_scan_topic_ : /registered_scan
+
+# 订阅话题：覆盖率边界（可视化用，定义探索覆盖区域的边界）
+sub_coverage_boundary_topic_ : /sensor_coverage_planner/coverage_boundary
+
+# 订阅话题：导航边界（定义机器人可移动的区域范围）
+sub_viewpoint_boundary_topic_ : /navigation_boundary
+
+# 订阅话题：禁止通行区域（不可进入的区域边界，用于设置禁区）
+sub_nogo_boundary_topic_ : /sensor_coverage_planner/nogo_boundary
+
+# 订阅话题：手柄摇杆数据（用于切换手动/自主模式）
+# axes[2] < -0.1 时进入自主模式
+sub_joystick_topic_ : /joy
+
+# 订阅话题：重置目标点信号
+sub_reset_waypoint_topic_ : /reset_waypoint
+
+# 发布话题：探索完成信号
+pub_exploration_finish_topic_ : exploration_finish
+
+# 发布话题：运行时性能分解数据（各模块耗时统计）
+pub_runtime_breakdown_topic_ : runtime_breakdown
+
+# 发布话题：总运行时间
+pub_runtime_topic_ : /runtime
+
+# 发布话题：下一个探索目标点（发送给 LocalPlanner）
+# 格式：geometry_msgs/PointStamped，坐标系为 world/map
+pub_waypoint_topic_ : /way_point
+
+# 发布话题：动量激活计数（用于调试：动量模式被激活的次数）
+pub_momentum_activation_count_topic_ : momentum_activation_count
+
+
+# ==========================================
+# 2. 探索控制逻辑
+# 控制全局探索行为的核心策略参数
+# ==========================================
+
+# 是否自动开始探索（true = 启动后自动开始，false = 需手动发布 /start_exploration）
+kAutoStart : true
+
+# 是否启用"冲回家"模式：当探索完成或失败时，是否返回起点
+kRushHome : true
+
+# 是否使用地形高度信息：true = 使用 /terrain_map_ext 的高度数据调整规划
+# false = 只使用点云判断障碍物，不考虑地形起伏
+# 地面平整时设为 false，环境有坡道/台阶时设为 true
+kUseTerrainHeight : false
+
+# 是否检查地形碰撞：true = 检查路径上是否有危险地形（陡坡、凹坑等）
+kCheckTerrainCollision : true
+
+# 是否启用路径延伸：true = 生成延伸路径点，false = 每次只移动一小步
+kExtendWayPoint : true
+
+# 是否使用视线前瞻点：true = 目标点必须与当前位置"可见"（中间无障碍遮挡）
+# false = 只要在范围内即可，不做视线检查
+kUseLineOfSightLookAheadPoint : true
+
+# 探索完成后是否返回起点（与 kRushHome 配合使用）
+kNoExplorationReturnHome : true
+
+# 大步长延伸距离（米）：每次探索目标延伸多远
+# 值越大 → 探索越激进，一次走更远
+# 值越小 → 探索越保守，频繁规划
+kExtendWayPointDistanceBig : 10
+
+# 小步长延伸距离（米）：障碍物附近的安全移动距离
+kExtendWayPointDistanceSmall : 3.5
+# 关键位姿点云降采样叶尺寸（米）
+# 用于控制关键位姿图的稠密程度
+kKeyposeCloudDwzFilterLeafSize : 0.2
+
+# 返回起点触发距离（米）：距离起点小于此值时触发回家逻辑
+kRushHomeDist : 5
+
+# 已到家判定距离（米）：距离起点小于此值时判定为已到家
+kAtHomeDistThreshold : 0.5
+
+# 地形碰撞阈值（米）：允许的地形高度变化，超过此值视为危险地形
+kTerrainCollisionThreshold : 0.5
+
+# 前视距离（米）：算法在当前视锥内能感知到前沿区域的最大距离
+# 值越大 → 越激进，选择远处目标
+# 值越小 → 越保守，困在小范围
+kLookAheadDistance : 8
+
+# 是否启用动量模式：true = 反复受阻时顺势沿当前方向前进
+kUseMomentum : true
+
+# 方向变化计数器阈值：连续改变方向多少次后触发动量模式
+kDirectionChangeCounterThr : 10
+
+# 方向不变计数器阈值：连续未到达目标点多少次后重新选择目标
+kDirectionNoChangeCounterThr : 3
+
+# 手柄重置目标点使用的摇杆轴编号
+# axes[2] 通常是左摇杆的上下（L2/R2），axes[3] 是右摇杆上下
+kResetWaypointJoystickAxesID : 2
+
+
+# ==========================================
+# 3. PlanningEnv - 前沿检测环境
+# 控制前沿（frontier）检测和行为
+# 前沿 = 已探索区域和未探索区域之间的边界
+# ==========================================
+
+# 是否使用前沿检测策略：true = 选择前沿区域作为探索目标
+kUseFrontier : true
+
+# 前沿聚类容差（米）：小于此距离的前沿点被归为同一簇
+# 值越大 → 前沿线被过度合并
+# 值越小 → 前沿线碎片化，可能产生很多小目标
+kFrontierClusterTolerance : 1.5
+
+# 前沿簇最小点数：少于此点数的前沿簇被丢弃
+kFrontierClusterMinSize : 20
+
+# 是否在覆盖率边界上检测前沿
+kUseCoverageBoundaryOnFrontier : false
+
+# 是否在物体表面上检测前沿
+kUseCoverageBoundaryOnObjectSurface : false
+
+
+# ==========================================
+# 4. Rolling Occupancy Grid - 滚动占据网格
+# 控制全局探索覆盖地图的分辨率
+# ==========================================
+
+# 网格在 X/Y/Z 三个方向的分辨率（米/格）
+# 值越小 → 地图越精细，计算量越大
+rolling_occupancy_grid/resolution_x : 0.3
+rolling_occupancy_grid/resolution_y : 0.3
+rolling_occupancy_grid/resolution_z : 0.3
+
+
+# ==========================================
+# 5. 点云处理参数
+# 控制输入点云的预处理和体素化
+# ==========================================
+
+# 表面点云降采样叶尺寸（米）：用于可视化和环境建模
+kSurfaceCloudDwzLeafSize : 0.3
+
+# 碰撞检测点云降采样叶尺寸（米）：用于路径碰撞检查
+# 值越小 → 碰撞检测越精确
+kCollisionCloudDwzLeafSize : 0.2
+
+# 关键位姿点云堆叠数量：连续几个关键位姿的点云合并处理
+kKeyposeCloudStackNum : 5
+
+# 占据网格尺寸参数（与 Rolling Grid 配合使用）
+kPointCloudRowNum : 50
+kPointCloudColNum : 50
+kPointCloudLevelNum : 30
+
+# 单个网格最多容纳的点数，超过则降采样
+kMaxCellPointNum : 100000
+
+# 点云管理器中单个网格的尺寸（米）
+kPointCloudCellSize : 18
+
+# 点云管理器中单个网格的高度（米）
+kPointCloudCellHeight : 1.8
+
+# 邻域网格数量：搜索相邻网格的范围
+kPointCloudManagerNeighborCellNum : 5
+
+# Z 轴压缩比：点云 Z 方向的压缩程度（大于1表示压缩）
+kCoverCloudZSqueezeRatio : 2.0
+
+
+# ==========================================
+# 6. KeyposeGraph - 关键位姿图
+# 管理机器人在探索过程中经过的关键位姿节点和边
+# 图的节点 = 关键位姿，边 = 节点之间的可通行路径
+# ==========================================
+
+# 添加关键位姿节点的最小移动距离（米）
+# 移动超过此距离才创建新关键位姿节点
+keypose_graph/kAddNodeMinDist : 1.0
+
+# 添加非关键位姿节点的最小移动距离（米）
+keypose_graph/kAddNonKeyposeNodeMinDist : 0.5
+
+# 连接相邻节点的最小距离阈值（米）
+keypose_graph/kAddEdgeConnectDistThr : 3.0
+
+# 与上一个关键位姿连接的最小距离阈值（米）
+keypose_graph/kAddEdgeToLastKeyposeDistThr : 3.0
+
+# 垂直方向的阈值（米）：允许两个节点之间有高度差仍能连接
+keypose_graph/kAddEdgeVerticalThreshold : 1.0
+
+# 边碰撞检查的分辨率（米）：检查路径上障碍物的密度
+keypose_graph/kAddEdgeCollisionCheckResolution : 0.4
+
+# 边碰撞检查的半径（米）：路径两侧的安全膨胀距离
+keypose_graph/kAddEdgeCollisionCheckRadius : 0.4
+
+# 碰撞检查的最小点数阈值：超过此点数才判定为碰撞
+keypose_graph/kAddEdgeCollisionCheckPointNumThr : 1
+
+
+# ==========================================
+# 7. ViewPointManager - 视点管理器
+# 管理候选视点（viewpoint）的采样、选择和碰撞检测
+# 视点 = 机器人在该位置可以"看到"新区域的位置
+# ==========================================
+
+# 候选视点在 X/Y/Z 方向的采样数量
+# 数量越大 → 候选视点越密集，计算量越大
+viewpoint_manager/number_x : 50
+viewpoint_manager/number_y : 50
+viewpoint_manager/number_z : 1
+
+# 候选视点在 X/Y/Z 方向的分辨率（米/视点）
+# 分辨率越小 → 视点越密集
+viewpoint_manager/resolution_x : 0.6
+viewpoint_manager/resolution_y : 0.6
+viewpoint_manager/resolution_z : 0.0
+
+# 视点连通性的最大高度差（米）：相邻视点之间允许的地形高度差
+kConnectivityHeightDiffThr : 0.25
+
+# 贪婪视点采样的范围（米）：从当前视点向外采样的最大半径
+kGreedyViewPointSampleRange : 3
+
+# 局部路径优化迭代次数：路径平滑和优化的迭代次数
+kLocalPathOptimizationItrMax : 10
+
+# 视点碰撞检测的安全膨胀距离（米）
+# 在所有方向上膨胀此距离，判断视点是否安全
+kViewPointCollisionMargin : 0.35
+
+# 向上方向的安全膨胀距离（米）：天花板等上方障碍物
+kViewPointCollisionMarginZPlus : 0.3
+
+# 向下方向的安全膨胀距离（米）：地面以下允许的安全范围
+kViewPointCollisionMarginZMinus : 0.55
+
+# 碰撞网格 Z 轴缩放因子
+kCollisionGridZScale : 1.0
+
+# 碰撞检测网格的分辨率（米）
+kCollisionGridResolutionX : 0.2
+kCollisionGridResolutionY : 0.2
+kCollisionGridResolutionZ : 0.0
+
+# 碰撞判定的最小点数：网格内超过此点数才判定为碰撞
+kCollisionPointThr : 1
+
+# 视线停止模式：true = 遇到障碍物停止，false = 不严格检查
+kLineOfSightStopAtNearestObstacle : true
+
+# 视点相对于地形的参考高度（米）
+# 通常设置为传感器安装高度
+kViewPointHeightFromTerrain : 0.55
+
+# 地形高度变化阈值（米）：超过此值时重新计算视点高度
+kViewPointHeightFromTerrainChangeThreshold : 0.6
+
+# 是否检查动态障碍物碰撞（true = 考虑动态障碍物）
+kCheckDynamicObstacleCollision : false
+
+# 碰撞检测的时间窗口（帧数）：连续几帧检测到障碍物才判定为碰撞
+kCollisionFrameCountMax : 3
+
+# 传感器有效感知范围（米）：只有此距离内的点云才参与计算
+# 值过小 → 感知范围不足，探索效率低
+# 值过大 → 计算量增加，可能包含大量噪声
+kSensorRange : 8.0
+
+# 邻域搜索范围（米）：搜索相邻视点的范围
+kNeighborRange : 3.0
+
+# 覆盖率遮挡阈值：判断视野被遮挡的程度
+kCoverageOcclusionThr : 0.3
+
+# 覆盖率膨胀半径（米）：膨胀已知区域
+kCoverageDilationRadius : 0.5
+
+
+# ==========================================
+# 8. Grid World - 网格世界
+# 定义 TARE 全局规划器的三维探索空间
+# 世界被划分为立方体网格，每个网格记录探索状态
+# ==========================================
+
+# 网格世界在 X/Y/Z 方向的网格数量（必须为奇数）
+kGridWorldXNum : 121
+kGridWorldYNum : 121
+kGridWorldZNum : 121
+
+# 每个网格的高度（米）：总高度 = 121 × 3.0 = 363 米
+kGridWorldCellHeight : 3.0
+
+# 附近网格数量：当前位姿周围参与计算的网格数量
+kGridWorldNearbyGridNum : 5
+
+# 小型网格最少添加点数：小于此值的网格被丢弃
+kMinAddPointNumSmall : 40
+
+# 大型网格最少添加点数：大于此值的网格被保留
+kMinAddPointNumBig : 60
+
+# 前沿网格最少点数：判断一个网格是否为前沿的阈值
+kMinAddFrontierPointNum : 10
+
+# 网格状态转换阈值
+# 从"探索中"变为"已覆盖"：连续检测到此值次数才转换
+kCellExploringToCoveredThr : 1
+
+# 从"已覆盖"变为"探索中"：超过此值才重新变为可探索
+kCellCoveredToExploringThr: 10
+
+# 从"探索中"变为"几乎覆盖"
+kCellExploringToAlmostCoveredThr: 10
+
+# 从"几乎覆盖"变为"探索中"
+kCellAlmostCoveredToExploringThr: 20
+
+# 从"未知"变为"探索中"的阈值
+kCellUnknownToExploringThr: 1
+
+
+# ==========================================
+# 9. Visualization - 可视化参数
+# 控制 RViz 中各种可视化元素的颜色、大小、高度
+# ==========================================
+
+# 探索子空间标记颜色配置
+# 是否使用颜色渐变透明度
+kExploringSubspaceMarkerColorGradientAlpha : true
+kExploringSubspaceMarkerColorMaxAlpha : 0.8
+
+# RGB 颜色值（0.0 ~ 1.0）：绿色
+kExploringSubspaceMarkerColorR : 0.0
+kExploringSubspaceMarkerColorG : 1.0
+kExploringSubspaceMarkerColorB : 0.0
+kExploringSubspaceMarkerColorA : 1.0
+
+# 局部规划范围标记颜色（同样为绿色）
+kLocalPlanningHorizonMarkerColorR : 0.0
+kLocalPlanningHorizonMarkerColorG : 1.0
+kLocalPlanningHorizonMarkerColorB : 0.0
+kLocalPlanningHorizonMarkerColorA : 1.0
+
+# 局部规划范围标记线宽（米）
+kLocalPlanningHorizonMarkerWidth : 0.3
+
+# 局部规划范围标记高度（米）
+kLocalPlanningHorizonHeight : 3.0
