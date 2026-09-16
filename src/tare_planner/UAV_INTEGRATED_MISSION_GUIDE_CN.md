@@ -231,7 +231,8 @@ PCD 只描述障碍表面，不包含严格的“未知/已知自由空间”语
 ```text
 src/tare_planner/CMakeLists.txt
 src/tare_planner/package.xml
-src/tare_planner/config/uav_fixed_height.yaml
+src/tare_planner/config/uav/                     # 原 config/uav_fixed_height.yaml 已按节点拆分到此目录
+src/tare_planner/launch/include/                 # 原 tare_uav_fixed_height.launch 拆出的组件
 src/tare_planner/include/sensor_coverage_planner/sensor_coverage_planner_ground.h
 src/tare_planner/src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp
 src/tare_planner/launch/tare_uav_fixed_height.launch

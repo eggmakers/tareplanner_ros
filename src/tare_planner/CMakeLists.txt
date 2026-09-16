@@ -43,7 +43,6 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/include"
   or-tools/include
   ${EIGEN3_INCLUDE_DIR}
-  /opt/nea/topaz/include
 )
 
 ## Specify additional locations for library files
@@ -53,104 +52,49 @@ link_directories(
   or-tools/lib
 )
 
-add_library(lidar_model src/lidar_model/lidar_model.cpp)
-add_dependencies(lidar_model ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(lidar_model ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+## ---- 统一的声明宏: 消除每个目标 3 行的重复样板 ---------------------------
+## add_tare_library(<目标名> <源文件> [额外链接库...])
+macro(add_tare_library name source)
+  add_library(${name} ${source})
+  add_dependencies(${name} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  target_link_libraries(${name} ${catkin_LIBRARIES} ${ARGN})
+endmacro()
 
-add_library(graph src/graph/graph.cpp)
-add_dependencies(graph ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(graph ${catkin_LIBRARIES})
+## add_tare_node(<目标名> <源文件> [额外链接库...])
+macro(add_tare_node name source)
+  add_executable(${name} ${source})
+  add_dependencies(${name} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  target_link_libraries(${name} ${catkin_LIBRARIES} ${ARGN})
+endmacro()
 
-add_library(misc_utils src/utils/misc_utils.cpp)
-add_dependencies(misc_utils ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(misc_utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+add_tare_library(lidar_model src/lidar_model/lidar_model.cpp ${PCL_LIBRARIES})
+add_tare_library(graph src/graph/graph.cpp)
+add_tare_library(misc_utils src/utils/misc_utils.cpp ${PCL_LIBRARIES})
+add_tare_library(pointcloud_utils src/utils/pointcloud_utils.cpp ${PCL_LIBRARIES})
+add_tare_library(tsp_solver src/tsp_solver/tsp_solver.cpp ${CMAKE_CURRENT_SOURCE_DIR}/or-tools/lib/libortools.so)
+add_tare_library(viewpoint src/viewpoint/viewpoint.cpp lidar_model)
+add_tare_library(rolling_grid src/rolling_grid/rolling_grid.cpp misc_utils pointcloud_utils)
+add_tare_library(viewpoint_manager src/viewpoint_manager/viewpoint_manager.cpp rolling_grid viewpoint grid_world)
+add_tare_library(local_coverage_planner src/local_coverage_planner/local_coverage_planner.cpp viewpoint_manager)
+add_tare_library(grid_world src/grid_world/grid_world.cpp viewpoint_manager tsp_solver keypose_graph exploration_path)
 
-add_library(pointcloud_utils src/utils/pointcloud_utils.cpp)
-add_dependencies(pointcloud_utils ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(pointcloud_utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+add_tare_library(pointcloud_manager src/pointcloud_manager/pointcloud_manager.cpp)
+add_tare_library(keypose_graph src/keypose_graph/keypose_graph.cpp ${PCL_LIBRARIES} viewpoint_manager)
+add_tare_library(rolling_occupancy_grid src/rolling_occupancy_grid/rolling_occupancy_grid.cpp)
+add_tare_library(planning_env src/planning_env/planning_env.cpp ${PCL_LIBRARIES} rolling_occupancy_grid)
+add_tare_library(exploration_path src/exploration_path/exploration_path.cpp ${PCL_LIBRARIES})
+add_tare_library(tare_visualizer src/tare_visualizer/tare_visualizer.cpp ${PCL_LIBRARIES})
+add_tare_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer)
 
-add_library(tsp_solver src/tsp_solver/tsp_solver.cpp)
-add_dependencies(tsp_solver ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(tsp_solver ${catkin_LIBRARIES} ${CMAKE_CURRENT_SOURCE_DIR}/or-tools/lib/libortools.so)
+## ---- 可执行节点 ----------------------------------------------------------
+add_tare_node(navigationBoundary src/navigation_boundary_publisher/navigationBoundary.cpp ${PCL_LIBRARIES})
+add_tare_node(tare_planner_node src/tare_planner_node/tare_planner_node.cpp sensor_coverage_planner_ground)
+add_tare_node(uav_local_planner_node src/uav_local_planner/uav_local_planner_node.cpp ${PCL_LIBRARIES})
+add_tare_node(uav_saved_map_planner_node src/uav_saved_map_planner/uav_saved_map_planner_node.cpp ${PCL_LIBRARIES})
 
-add_library(viewpoint src/viewpoint/viewpoint.cpp)
-add_dependencies(viewpoint ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(viewpoint ${catkin_LIBRARIES} lidar_model)
-
-add_library(rolling_grid src/rolling_grid/rolling_grid.cpp)
-add_dependencies(rolling_grid ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(rolling_grid ${catkin_LIBRARIES} misc_utils pointcloud_utils)
-
-add_library(viewpoint_manager src/viewpoint_manager/viewpoint_manager.cpp)
-add_dependencies(viewpoint_manager ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(viewpoint_manager ${catkin_LIBRARIES} rolling_grid viewpoint grid_world)
-
-add_library(local_coverage_planner src/local_coverage_planner/local_coverage_planner.cpp)
-add_dependencies(local_coverage_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(local_coverage_planner ${catkin_LIBRARIES} viewpoint_manager)
-
-add_library(grid_world src/grid_world/grid_world.cpp)
-add_dependencies(grid_world ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(grid_world ${catkin_LIBRARIES} viewpoint_manager tsp_solver keypose_graph exploration_path)
-
-add_library(pointcloud_manager src/pointcloud_manager/pointcloud_manager.cpp)
-add_dependencies(pointcloud_manager ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(pointcloud_manager ${catkin_LIBRARIES})
-
-add_library(keypose_graph src/keypose_graph/keypose_graph.cpp)
-add_dependencies(keypose_graph ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(keypose_graph ${catkin_LIBRARIES} ${PCL_LIBRARIES} viewpoint_manager)
-
-add_library(rolling_occupancy_grid src/rolling_occupancy_grid/rolling_occupancy_grid.cpp)
-add_dependencies(rolling_occupancy_grid ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(rolling_occupancy_grid ${catkin_LIBRARIES})
-
-add_library(planning_env src/planning_env/planning_env.cpp)
-add_dependencies(planning_env ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(planning_env ${catkin_LIBRARIES} ${PCL_LIBRARIES} rolling_occupancy_grid)
-
-add_library(exploration_path src/exploration_path/exploration_path.cpp)
-add_dependencies(exploration_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(exploration_path ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-add_library(tare_visualizer src/tare_visualizer/tare_visualizer.cpp)
-add_dependencies(tare_visualizer ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(tare_visualizer ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-add_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp)
-add_dependencies(sensor_coverage_planner_ground ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(sensor_coverage_planner_ground ${catkin_LIBRARIES} graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer)
-
-add_executable(navigationBoundary src/navigation_boundary_publisher/navigationBoundary.cpp)
-target_link_libraries(navigationBoundary ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-add_executable(tare_planner_node src/tare_planner_node/tare_planner_node.cpp)
-add_dependencies(tare_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} )
-target_link_libraries(tare_planner_node ${catkin_LIBRARIES} sensor_coverage_planner_ground)
-
-add_executable(uav_local_planner_node src/uav_local_planner/uav_local_planner_node.cpp)
-add_dependencies(uav_local_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(uav_local_planner_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-add_executable(uav_saved_map_planner_node src/uav_saved_map_planner/uav_saved_map_planner_node.cpp)
-add_dependencies(uav_saved_map_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(uav_saved_map_planner_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
-
-catkin_install_python(PROGRAMS
-  scripts/airsim_lidar_bridge.py
-  scripts/airsim_tunnel_scene.py
-  scripts/blocks_integrated_closed_loop_test.py
-  scripts/blocks_manual_navigation_test.py
-  scripts/blocks_smoke_test.py
-  scripts/uav_offboard_manager.py
-  scripts/uav_mode_command.py
-  scripts/uav_exploration_viewer.py
-  scripts/uav_waypoint_bridge.py
-  scripts/uav_bundle_validator.py
-  scripts/uav_mission_command.py
-  scripts/uav_mission_mux.py
-  scripts/uav_path_exporter.py
-  scripts/uav_path_replayer.py
+## ---- Python 脚本 (通配收集, 新增脚本后需重新运行 cmake) -------------------
+file(GLOB TARE_PY_SCRIPTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.py)
+catkin_install_python(PROGRAMS ${TARE_PY_SCRIPTS}
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -177,10 +121,20 @@ install(TARGETS uav_saved_map_planner_node
 #############
 
 if(CATKIN_ENABLE_TESTING)
+  ## 纯 C++ 单元测试
   add_executable(test_uav_local_planner_core test/test_uav_local_planner_core.cpp)
+  target_link_libraries(test_uav_local_planner_core ${catkin_LIBRARIES} ${PCL_LIBRARIES})
   add_test(NAME test_uav_local_planner_core COMMAND test_uav_local_planner_core)
-  add_test(NAME test_uav_manual_navigation_profile
-           COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_uav_manual_navigation_profile.py)
-  add_test(NAME test_uav_handoff_profile
-           COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_uav_handoff_profile.py)
+
+  ## launch / 脚本 静态一致性检查 (纯文本+XML 解析, 不需要 roscore)
+  set(TARE_PY_TESTS
+    test_uav_handoff_profile
+    test_uav_manual_navigation_profile
+    test_uav_waypoint_bridge_profile
+    test_uav_offboard_manager
+  )
+  foreach(t ${TARE_PY_TESTS})
+    add_test(NAME ${t}
+             COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/${t}.py)
+  endforeach()
 endif()
