@@ -1,8 +1,55 @@
 # tare_planner 重构方案（评审稿）
 
-> 状态：**仅方案，未执行任何代码改动**。每个决策点都给了【推荐】选项和理由。
+> 状态：**P0 + P1 + P2 已执行完毕**（2026-09-16，分支 `refactor/uav-layer`），
+> P3~P5 仍是方案。
 > 生成时间：2026-09-16
 > 适用入口：`roslaunch tare_planner tare_uav_fixed_height.launch ...`
+
+---
+
+## 执行记录（P0 ~ P2）
+
+| 阶段 | commit | 结果 |
+|---|---|---|
+| P0 基线 | `4836397` | 建分支；自研文件纳入版本控制；`refactor_tools/baseline/` 存档重构前解析快照（nodes 10 / params 215 / args 128） |
+| P1 清理 | `afa307f` | 删除 13 个文件（wheeltec/CMU 桥、wheeltec GUI、6 个 AirSim 脚本、2 个 AirSim 测试、2 个垃圾 config）；CMake 去样板 + 去死路径；`catkin_make` 0 error |
+| P2 launch 解耦 | `6d9342d` | 参数下沉到 `config/uav/`（6 个文件，228 键）；新增 `launch/include/_*.launch`（8 个）；主 launch 357→~290 行但**零默认值重复**；删除孤儿 `config/uav_fixed_height.yaml` |
+
+### 验收结果（用你那条原命令，不启动 master 解析）
+
+| 检查项 | 结果 |
+|---|---|
+| 节点集合 | **10 == 10**，diff 为空 |
+| 参数集合 | **215 == 215**，diff 为空（逐字节一致） |
+| profile 测试 | 5 + 6 + 15 + 3 全部通过 |
+| `catkin_make` | 0 error，4 个可执行文件重新生成 |
+| 第二入口 | `tare_uav_integrated_mission.launch` 9 节点正常解析 |
+
+复现命令：
+
+```bash
+cd ~/tare_planner
+source /opt/ros/noetic/setup.bash && source devel/setup.bash
+bash refactor_tools/snapshot_launch.sh after_p2
+diff refactor_tools/baseline/params.txt refactor_tools/after_p2/params.txt   # 应为空
+```
+
+### 与本文档原方案的偏差（有意为之）
+
+| 项 | 原方案 | 实际 | 原因 |
+|---|---|---|---|
+| config 拆分方式 | 按主题拆 8 个（topics/frames/limits/...） | 按**节点**拆 6 个 | `<rosparam>` 是相对节点命名空间加载的，一个文件无法跨节点共享同名键，按节点拆才不会互相污染 |
+| launch 的 arg 数量 | 收缩到 ≤8 | 13 个开关 + 33 个接线 + 42 个覆盖 = 77 | D4 要求你的原命令逐字可用；这些 arg 默认值全为 `""`，**不重复任何默认数字**，是"覆盖层"而非第二份配置 |
+| frame 名 | 放 `frames.yaml` | 由 `map_frame` arg 统管 | `planning_frame` / `frame_id` 只有一个值、三处使用，用 arg 保证一致 |
+| `tare_uav_integrated_mission.launch` | 一并重构 | **未重构**，保持 220 行旧结构 | 控制改动面；已把它的 53 个传参全部补齐，可正常加载。它仍保留自己的重复参数，建议后续单独做 P2' |
+| `explore*.launch` | —— | **保留** | 它们是上游 TARE 的通用入口（不依赖 wheeltec），删除不属于"移除 wheeltec 支持"；如需一并删除请告知 |
+
+### 顺带修掉的问题
+
+- `CMakeLists.txt` 死路径 `/opt/nea/topaz/include`
+- `catkin_install_python` 手工清单 → 通配（新增脚本不再需要改 CMake）
+- `map_publisher.launch` 的 wheeltec 硬编码 PCD 路径
+- 4 个 profile 测试里 2 个未在 CMake 注册
 
 ---
 
