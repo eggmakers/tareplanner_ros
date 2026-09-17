@@ -84,7 +84,9 @@ add_tare_library(rolling_occupancy_grid src/rolling_occupancy_grid/rolling_occup
 add_tare_library(planning_env src/planning_env/planning_env.cpp ${PCL_LIBRARIES} rolling_occupancy_grid)
 add_tare_library(exploration_path src/exploration_path/exploration_path.cpp ${PCL_LIBRARIES})
 add_tare_library(tare_visualizer src/tare_visualizer/tare_visualizer.cpp ${PCL_LIBRARIES})
-add_tare_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer)
+## 自研任务层（定高飞行 / 目标导航 / 固定起点规划）
+add_tare_library(mission_config src/mission/mission_config.cpp)
+add_tare_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer mission_config)
 
 ## ---- 可执行节点 ----------------------------------------------------------
 add_tare_node(navigationBoundary src/navigation_boundary_publisher/navigationBoundary.cpp ${PCL_LIBRARIES})

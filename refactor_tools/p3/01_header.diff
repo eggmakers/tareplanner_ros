@@ -1,0 +1,186 @@
+diff --git a/src/tare_planner/include/sensor_coverage_planner/sensor_coverage_planner_ground.h b/src/tare_planner/include/sensor_coverage_planner/sensor_coverage_planner_ground.h
+index db0188f..4f15a37 100644
+--- a/src/tare_planner/include/sensor_coverage_planner/sensor_coverage_planner_ground.h
++++ b/src/tare_planner/include/sensor_coverage_planner/sensor_coverage_planner_ground.h
+@@ -10,7 +10,10 @@
+  */
+ #pragma once
+ 
++#include <algorithm>
+ #include <cmath>
++#include <limits>
++#include <string>
+ #include <vector>
+ 
+ #include <Eigen/Core>
+@@ -19,6 +22,7 @@
+ #include <message_filters/sync_policies/approximate_time.h>
+ #include <message_filters/time_synchronizer.h>
+ #include <nav_msgs/Odometry.h>
++#include <nav_msgs/Path.h>
+ #include <ros/ros.h>
+ #include <sensor_msgs/PointCloud2.h>
+ #include <sensor_msgs/Joy.h>
+@@ -27,8 +31,11 @@
+ #include <std_msgs/Int32MultiArray.h>
+ #include <std_msgs/Float32.h>
+ #include <std_msgs/Empty.h>
++#include <std_msgs/String.h>
+ #include <geometry_msgs/PolygonStamped.h>
++#include <geometry_msgs/PointStamped.h>
+ #include <geometry_msgs/Pose.h>
++#include <geometry_msgs/PoseStamped.h>
+ // PCL
+ #include <pcl/PointIndices.h>
+ #include <pcl/filters/extract_indices.h>
+@@ -77,12 +84,26 @@ struct PlannerParameters
+   std::string sub_nogo_boundary_topic_;
+   std::string sub_joystick_topic_;
+   std::string sub_reset_waypoint_topic_;
++  std::string sub_manual_goal_topic_;
++  std::string sub_fixed_start_goal_topic_;
++  std::string sub_pause_mission_topic_;
++  std::string sub_resume_exploration_topic_;
++  std::string sub_cancel_navigation_topic_;
+ 
+   std::string pub_exploration_finish_topic_;
+   std::string pub_runtime_breakdown_topic_;
+   std::string pub_runtime_topic_;
+   std::string pub_waypoint_topic_;
+   std::string pub_momentum_activation_count_topic_;
++  std::string pub_manual_navigation_path_topic_;
++  std::string pub_manual_navigation_goal_topic_;
++  std::string pub_mission_mode_topic_;
++  std::string pub_navigation_active_topic_;
++  std::string pub_navigation_reached_topic_;
++  std::string pub_fixed_start_path_topic_;
++  std::string pub_fixed_start_goal_topic_;
++  std::string pub_fixed_start_status_topic_;
++  std::string pub_exploration_start_pose_topic_;
+ 
+   // Bool
+   bool kAutoStart;
+@@ -93,6 +114,10 @@ struct PlannerParameters
+   bool kUseLineOfSightLookAheadPoint;
+   bool kNoExplorationReturnHome;
+   bool kUseMomentum;
++  bool kUseFixedFlightHeight;
++  bool kFixedFlightHeightRelativeToStart;
++  bool kEnableManualGoalNavigation;
++  bool kEnableFixedStartPlanning;
+ 
+   // Double
+   double kKeyposeCloudDwzFilterLeafSize;
+@@ -102,6 +127,14 @@ struct PlannerParameters
+   double kLookAheadDistance;
+   double kExtendWayPointDistanceBig;
+   double kExtendWayPointDistanceSmall;
++  double kFixedFlightHeight;
++  double kExplorationWarmupSeconds;
++  double kExplorationCompletionConfirmSeconds;
++  double kManualGoalArrivalRadius;
++  double kManualGoalStableSeconds;
++  double kManualGoalMaxGraphDistance;
++  double kManualGoalClearance;
++  double kManualGoalVerticalClearance;
+ 
+   // Int
+   int kDirectionChangeCounterThr;
+@@ -145,6 +178,7 @@ struct PlannerData
+   std::vector<Eigen::Vector3d> visited_positions_;
+   int cur_keypose_node_ind_;
+   Eigen::Vector3d initial_position_;
++  bool initial_position_set_;
+ 
+   std::unique_ptr<keypose_graph_ns::KeyposeGraph> keypose_graph_;
+   std::unique_ptr<planning_env_ns::PlanningEnv> planning_env_;
+@@ -170,6 +204,13 @@ public:
+   ~SensorCoveragePlanner3D() = default;
+ 
+ private:
++  enum class MissionMode
++  {
++    EXPLORATION,
++    HOLD,
++    NAVIGATION
++  };
++
+   bool keypose_cloud_update_;
+   bool initialized_;
+   bool lookahead_point_update_;
+@@ -185,6 +226,11 @@ private:
+   bool use_momentum_;
+   bool lookahead_point_in_line_of_sight_;
+   bool reset_waypoint_;
++  bool exploration_completion_pending_;
++  bool manual_goal_reached_;
++  bool manual_goal_arrival_pending_;
++  bool hold_position_set_;
++  MissionMode mission_mode_;
+   PlannerParameters pp_;
+   PlannerData pd_;
+   pointcloud_utils_ns::PointCloudDownsizer<pcl::PointXYZ> pointcloud_downsizer_;
+@@ -205,6 +251,12 @@ private:
+ 
+   ros::Time start_time_;
+   ros::Time global_direction_switch_time_;
++  ros::Time exploration_completion_candidate_time_;
++  ros::Time manual_goal_arrival_time_;
++  geometry_msgs::Point manual_goal_;
++  geometry_msgs::Point hold_position_;
++  nav_msgs::Path manual_navigation_path_;
++  std::string mission_status_;
+ 
+   ros::Timer execution_timer_;
+ 
+@@ -219,6 +271,11 @@ private:
+   ros::Subscriber nogo_boundary_sub_;
+   ros::Subscriber joystick_sub_;
+   ros::Subscriber reset_waypoint_sub_;
++  ros::Subscriber manual_goal_sub_;
++  ros::Subscriber fixed_start_goal_sub_;
++  ros::Subscriber pause_mission_sub_;
++  ros::Subscriber resume_exploration_sub_;
++  ros::Subscriber cancel_navigation_sub_;
+ 
+   // ROS publishers
+   ros::Publisher global_path_full_publisher_;
+@@ -232,6 +289,15 @@ private:
+   ros::Publisher runtime_breakdown_pub_;
+   ros::Publisher runtime_pub_;
+   ros::Publisher momentum_activation_count_pub_;
++  ros::Publisher manual_navigation_path_pub_;
++  ros::Publisher manual_navigation_goal_pub_;
++  ros::Publisher mission_mode_pub_;
++  ros::Publisher navigation_active_pub_;
++  ros::Publisher navigation_reached_pub_;
++  ros::Publisher fixed_start_path_pub_;
++  ros::Publisher fixed_start_goal_pub_;
++  ros::Publisher fixed_start_status_pub_;
++  ros::Publisher exploration_start_pose_pub_;
+   // Debug
+   ros::Publisher pointcloud_manager_neighbor_cells_origin_pub_;
+ 
+@@ -246,7 +312,22 @@ private:
+   void NogoBoundaryCallback(const geometry_msgs::PolygonStampedConstPtr& polygon_msg);
+   void JoystickCallback(const sensor_msgs::Joy::ConstPtr& joy_msg);
+   void ResetWaypointCallback(const std_msgs::Empty::ConstPtr& empty_msg);
++  void ManualGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& goal_msg);
++  void FixedStartGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& goal_msg);
++  void PauseMissionCallback(const std_msgs::Bool::ConstPtr& pause_msg);
++  void ResumeExplorationCallback(const std_msgs::Bool::ConstPtr& resume_msg);
++  void CancelNavigationCallback(const std_msgs::Bool::ConstPtr& cancel_msg);
+ 
++  double GetFixedFlightHeightOr(double fallback_z) const;
++  bool BuildGraphNavigationPath(const geometry_msgs::Point& start, const geometry_msgs::Point& goal,
++                                nav_msgs::Path& path, std::string& failure_reason);
++  bool BuildManualNavigationPath(nav_msgs::Path& path, std::string& failure_reason);
++  bool ManualGoalHasClearance(const geometry_msgs::Point& goal) const;
++  void ExecuteManualNavigation();
++  void LatchHoldPosition();
++  void PublishHoldCommand(const std::string& reason);
++  void PublishMissionState(const std::string& status);
++  void PublishManualNavigationOutputs(const nav_msgs::Path& path);
+   void SendInitialWaypoint();
+   void UpdateKeyposeGraph();
+   int UpdateViewPoints();

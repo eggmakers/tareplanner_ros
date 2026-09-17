@@ -1,0 +1,31 @@
+diff --git a/src/tare_planner/src/navigation_boundary_publisher/navigationBoundary.cpp b/src/tare_planner/src/navigation_boundary_publisher/navigationBoundary.cpp
+index 822a053..eb860b2 100644
+--- a/src/tare_planner/src/navigation_boundary_publisher/navigationBoundary.cpp
++++ b/src/tare_planner/src/navigation_boundary_publisher/navigationBoundary.cpp
+@@ -96,7 +96,7 @@ int main(int argc, char** argv)
+   nhPrivate.getParam("sendBoundary", sendBoundary);
+   nhPrivate.getParam("sendBoundaryInterval", sendBoundaryInterval);
+ 
+-  ros::Publisher pubBoundary = nh.advertise<geometry_msgs::PolygonStamped>("/navigation_boundary", 5);
++  ros::Publisher pubBoundary = nh.advertise<geometry_msgs::PolygonStamped>("/navigation_boundary", 1, true);
+   geometry_msgs::PolygonStamped boundaryMsgs;
+   boundaryMsgs.header.frame_id = "map";
+ 
+@@ -113,6 +113,9 @@ int main(int argc, char** argv)
+       boundaryMsgs.polygon.points[i].y = boundary->points[i].y;
+       boundaryMsgs.polygon.points[i].z = boundary->points[i].z;
+     }
++    boundaryMsgs.header.stamp = ros::Time::now();
++    pubBoundary.publish(boundaryMsgs);
++    ROS_INFO("Published latched navigation boundary with %d points", boundarySize);
+   }
+ 
+   ros::Rate rate(100);
+@@ -125,6 +128,7 @@ int main(int argc, char** argv)
+     sendBoundaryCount++;
+     if (sendBoundaryCount >= 100 * sendBoundaryInterval && sendBoundary)
+     {
++      boundaryMsgs.header.stamp = ros::Time::now();
+       pubBoundary.publish(boundaryMsgs);
+       sendBoundaryCount = 0;
+     }

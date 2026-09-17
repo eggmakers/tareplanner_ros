@@ -49,6 +49,8 @@
 // Third parties
 #include <utils/pointcloud_utils.h>
 #include <utils/misc_utils.h>
+// Mission layer (自研任务层: 定高飞行 / 目标导航 / 固定起点规划)
+#include "mission/mission_config.h"
 // Components
 #include "keypose_graph/keypose_graph.h"
 #include "planning_env/planning_env.h"
@@ -70,7 +72,12 @@ typedef pcl::PointXYZRGBNormal PlannerCloudPointType;
 typedef pcl::PointCloud<PlannerCloudPointType> PlannerCloudType;
 typedef misc_utils_ns::Timer Timer;
 
-struct PlannerParameters
+/// TARE 探索算法参数。
+///
+/// 自研任务层参数（定高飞行 / RViz 目标导航 / 固定起点规划，以及 /tare_uav/* 话题）
+/// 已抽到基类 mission_ns::MissionConfig。通过继承，原有 pp_.kManualGoalXxx、
+/// pp_.sub_manual_goal_topic_ 等 40 多处访问点无需改动。
+struct PlannerParameters : public mission_ns::MissionConfig
 {
   // String
   std::string sub_start_exploration_topic_;
@@ -84,26 +91,12 @@ struct PlannerParameters
   std::string sub_nogo_boundary_topic_;
   std::string sub_joystick_topic_;
   std::string sub_reset_waypoint_topic_;
-  std::string sub_manual_goal_topic_;
-  std::string sub_fixed_start_goal_topic_;
-  std::string sub_pause_mission_topic_;
-  std::string sub_resume_exploration_topic_;
-  std::string sub_cancel_navigation_topic_;
 
   std::string pub_exploration_finish_topic_;
   std::string pub_runtime_breakdown_topic_;
   std::string pub_runtime_topic_;
   std::string pub_waypoint_topic_;
   std::string pub_momentum_activation_count_topic_;
-  std::string pub_manual_navigation_path_topic_;
-  std::string pub_manual_navigation_goal_topic_;
-  std::string pub_mission_mode_topic_;
-  std::string pub_navigation_active_topic_;
-  std::string pub_navigation_reached_topic_;
-  std::string pub_fixed_start_path_topic_;
-  std::string pub_fixed_start_goal_topic_;
-  std::string pub_fixed_start_status_topic_;
-  std::string pub_exploration_start_pose_topic_;
 
   // Bool
   bool kAutoStart;
@@ -114,10 +107,6 @@ struct PlannerParameters
   bool kUseLineOfSightLookAheadPoint;
   bool kNoExplorationReturnHome;
   bool kUseMomentum;
-  bool kUseFixedFlightHeight;
-  bool kFixedFlightHeightRelativeToStart;
-  bool kEnableManualGoalNavigation;
-  bool kEnableFixedStartPlanning;
 
   // Double
   double kKeyposeCloudDwzFilterLeafSize;
@@ -127,14 +116,6 @@ struct PlannerParameters
   double kLookAheadDistance;
   double kExtendWayPointDistanceBig;
   double kExtendWayPointDistanceSmall;
-  double kFixedFlightHeight;
-  double kExplorationWarmupSeconds;
-  double kExplorationCompletionConfirmSeconds;
-  double kManualGoalArrivalRadius;
-  double kManualGoalStableSeconds;
-  double kManualGoalMaxGraphDistance;
-  double kManualGoalClearance;
-  double kManualGoalVerticalClearance;
 
   // Int
   int kDirectionChangeCounterThr;

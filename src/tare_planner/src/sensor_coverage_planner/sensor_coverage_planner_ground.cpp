@@ -11,6 +11,7 @@
 
 #include "sensor_coverage_planner/sensor_coverage_planner_ground.h"
 #include "graph/graph.h"
+#include "mission/mission_config.h"
 
 namespace sensor_coverage_planner_3d_ns
 {
@@ -32,16 +33,6 @@ bool PlannerParameters::ReadParameters(ros::NodeHandle& nh)
   sub_nogo_boundary_topic_ = misc_utils_ns::getParam<std::string>(nh, "sub_nogo_boundary_topic_", "/nogo_boundary");
   sub_joystick_topic_ = misc_utils_ns::getParam<std::string>(nh, "sub_joystick_topic_", "/joy");
   sub_reset_waypoint_topic_ = misc_utils_ns::getParam<std::string>(nh, "sub_reset_waypoint_topic_", "/reset_waypoint");
-  sub_manual_goal_topic_ =
-      misc_utils_ns::getParam<std::string>(nh, "sub_manual_goal_topic_", "/move_base_simple/goal");
-  sub_fixed_start_goal_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "sub_fixed_start_goal_topic_", "/tare_uav/fixed_start_goal");
-  sub_pause_mission_topic_ =
-      misc_utils_ns::getParam<std::string>(nh, "sub_pause_mission_topic_", "/tare_uav/mission/pause");
-  sub_resume_exploration_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "sub_resume_exploration_topic_", "/tare_uav/mission/resume_exploration");
-  sub_cancel_navigation_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "sub_cancel_navigation_topic_", "/tare_uav/navigation/cancel");
   pub_exploration_finish_topic_ =
       misc_utils_ns::getParam<std::string>(nh, "pub_exploration_finish_topic_", "exploration_finish");
   pub_runtime_breakdown_topic_ =
@@ -50,24 +41,6 @@ bool PlannerParameters::ReadParameters(ros::NodeHandle& nh)
   pub_waypoint_topic_ = misc_utils_ns::getParam<std::string>(nh, "pub_waypoint_topic_", "/way_point");
   pub_momentum_activation_count_topic_ =
       misc_utils_ns::getParam<std::string>(nh, "pub_momentum_activation_count_topic_", "momentum_activation_count");
-  pub_manual_navigation_path_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_manual_navigation_path_topic_", "/tare_uav/navigation/path");
-  pub_manual_navigation_goal_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_manual_navigation_goal_topic_", "/tare_uav/navigation/goal");
-  pub_mission_mode_topic_ =
-      misc_utils_ns::getParam<std::string>(nh, "pub_mission_mode_topic_", "/tare_uav/mission/mode");
-  pub_navigation_active_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_navigation_active_topic_", "/tare_uav/navigation/active");
-  pub_navigation_reached_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_navigation_reached_topic_", "/tare_uav/navigation/reached");
-  pub_fixed_start_path_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_fixed_start_path_topic_", "/tare_uav/fixed_start_path");
-  pub_fixed_start_goal_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_fixed_start_goal_topic_", "/tare_uav/fixed_start_goal_accepted");
-  pub_fixed_start_status_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_fixed_start_status_topic_", "/tare_uav/fixed_start_status");
-  pub_exploration_start_pose_topic_ = misc_utils_ns::getParam<std::string>(
-      nh, "pub_exploration_start_pose_topic_", "/tare_uav/exploration_start_pose");
 
   // Bool
   kAutoStart = misc_utils_ns::getParam<bool>(nh, "kAutoStart", false);
@@ -78,11 +51,6 @@ bool PlannerParameters::ReadParameters(ros::NodeHandle& nh)
   kUseLineOfSightLookAheadPoint = misc_utils_ns::getParam<bool>(nh, "kUseLineOfSightLookAheadPoint", true);
   kNoExplorationReturnHome = misc_utils_ns::getParam<bool>(nh, "kNoExplorationReturnHome", true);
   kUseMomentum = misc_utils_ns::getParam<bool>(nh, "kUseMomentum", false);
-  kUseFixedFlightHeight = misc_utils_ns::getParam<bool>(nh, "kUseFixedFlightHeight", false);
-  kFixedFlightHeightRelativeToStart =
-      misc_utils_ns::getParam<bool>(nh, "kFixedFlightHeightRelativeToStart", false);
-  kEnableManualGoalNavigation = misc_utils_ns::getParam<bool>(nh, "kEnableManualGoalNavigation", false);
-  kEnableFixedStartPlanning = misc_utils_ns::getParam<bool>(nh, "kEnableFixedStartPlanning", true);
 
   // Double
   kKeyposeCloudDwzFilterLeafSize = misc_utils_ns::getParam<double>(nh, "kKeyposeCloudDwzFilterLeafSize", 0.2);
@@ -92,27 +60,16 @@ bool PlannerParameters::ReadParameters(ros::NodeHandle& nh)
   kLookAheadDistance = misc_utils_ns::getParam<double>(nh, "kLookAheadDistance", 5.0);
   kExtendWayPointDistanceBig = misc_utils_ns::getParam<double>(nh, "kExtendWayPointDistanceBig", 8.0);
   kExtendWayPointDistanceSmall = misc_utils_ns::getParam<double>(nh, "kExtendWayPointDistanceSmall", 3.0);
-  kFixedFlightHeight = misc_utils_ns::getParam<double>(nh, "kFixedFlightHeight", 1.5);
-  kExplorationWarmupSeconds = misc_utils_ns::getParam<double>(nh, "kExplorationWarmupSeconds", 3.0);
-  kExplorationCompletionConfirmSeconds =
-      misc_utils_ns::getParam<double>(nh, "kExplorationCompletionConfirmSeconds", 8.0);
-  kManualGoalArrivalRadius = misc_utils_ns::getParam<double>(nh, "kManualGoalArrivalRadius", 0.35);
-  kManualGoalStableSeconds = misc_utils_ns::getParam<double>(nh, "kManualGoalStableSeconds", 2.0);
-  kManualGoalMaxGraphDistance = misc_utils_ns::getParam<double>(nh, "kManualGoalMaxGraphDistance", 2.0);
-  kManualGoalClearance = misc_utils_ns::getParam<double>(nh, "kManualGoalClearance", 0.75);
-  kManualGoalVerticalClearance = misc_utils_ns::getParam<double>(nh, "kManualGoalVerticalClearance", 0.35);
 
   // Int
   kDirectionChangeCounterThr = misc_utils_ns::getParam<int>(nh, "kDirectionChangeCounterThr", 4);
   kDirectionNoChangeCounterThr = misc_utils_ns::getParam<int>(nh, "kDirectionNoChangeCounterThr", 5);
   kResetWaypointJoystickAxesID = misc_utils_ns::getParam<int>(nh, "kResetWaypointJoystickAxesID", 0);
 
-  if (kEnableManualGoalNavigation &&
-      (kManualGoalArrivalRadius <= 0.0 || kManualGoalStableSeconds < 0.0 ||
-       kManualGoalMaxGraphDistance <= 0.0 || kManualGoalClearance <= 0.0 ||
-       kManualGoalVerticalClearance <= 0.0))
+  // 任务层参数（定高飞行 / RViz 目标导航 / 固定起点规划 + /tare_uav/* 话题）。
+  // 读取与合法性校验都封装在 MissionConfig 内，参数名/默认值/错误信息和以前一致。
+  if (!MissionConfig::LoadFromRos(nh))
   {
-    ROS_ERROR("Manual goal navigation parameters must be positive (stable seconds may be zero)");
     return false;
   }
 
