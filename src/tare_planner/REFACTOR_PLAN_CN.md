@@ -1,19 +1,24 @@
 # tare_planner 重构方案（评审稿）
 
-> 状态：**P0 + P1 + P2 已执行完毕**（2026-09-16，分支 `refactor/uav-layer`），
-> P3~P5 仍是方案。
-> 生成时间：2026-09-16
+> 状态：**P0 ~ P3 已执行完毕，P5 已交付；P4（Python 收敛）未执行**
+> （2026-09-16，分支 `refactor/uav-layer`）。
+> 生成时间：2026-09-16（末次更新：P3 / P5 执行后）
 > 适用入口：`roslaunch tare_planner tare_uav_fixed_height.launch ...`
+> 上游同步如何处理，见 `UPSTREAM_SYNC_CN.md`。
 
 ---
 
-## 执行记录（P0 ~ P2）
+## 执行记录（P0 ~ P3、P5）
 
 | 阶段 | commit | 结果 |
 |---|---|---|
 | P0 基线 | `4836397` | 建分支；自研文件纳入版本控制；`refactor_tools/baseline/` 存档重构前解析快照（nodes 10 / params 215 / args 128） |
 | P1 清理 | `afa307f` | 删除 13 个文件（wheeltec/CMU 桥、wheeltec GUI、6 个 AirSim 脚本、2 个 AirSim 测试、2 个垃圾 config）；CMake 去样板 + 去死路径；`catkin_make` 0 error |
 | P2 launch 解耦 | `6d9342d` | 参数下沉到 `config/uav/`（6 个文件，228 键）；新增 `launch/include/_*.launch`（8 个）；主 launch 357→~290 行但**零默认值重复**；删除孤儿 `config/uav_fixed_height.yaml` |
+| 文档 | `10bbfa5` | 把 P0~P2 的执行记录与偏差写回本文档 |
+| P3a 参数抽离 | `6dcb02b` | 新增 `mission_ns::MissionConfig`；`PlannerParameters` 改为继承它，26 个自研字段声明 + 参数读取 + 校验全部移出；planner `2014→1935` 行 |
+| P3b 逻辑抽离 | `308cd4e` | 新增 `mission_ns` 定高 / 目标净空 / 连通图导航；planner 三个成员函数变薄委托（**头文件一字未改，13 处调用点不动**）；planner `1935→1843` 行 |
+| P5 上游友好化 | 随 P3 一并提交 | 复查 6 个上游文件的**每一处**改动，确认无可再移出项（结论见 §4-P5）；交付 `UPSTREAM_SYNC_CN.md` |
 
 ### 验收结果（用你那条原命令，不启动 master 解析）
 
@@ -24,6 +29,16 @@
 | profile 测试 | 5 + 6 + 15 + 3 全部通过 |
 | `catkin_make` | 0 error，4 个可执行文件重新生成 |
 | 第二入口 | `tare_uav_integrated_mission.launch` 9 节点正常解析 |
+
+### 验收结果（P3a / P3b）
+
+| 检查项 | P3a | P3b |
+|---|---|---|
+| `catkin_make` | 0 error | 0 error（`libmission_path_utils.a` + 节点重新生成） |
+| 节点集合 vs 基线 | diff 为空 | diff 为空 |
+| 参数集合 vs 基线 | diff 为空 | diff 为空 |
+| profile 测试 | 5 + 6 + 15 + 3 全通过 | 5 + 6 + 15 + 3 全通过 |
+| 实飞 | ——（待 P3 整体完成后复飞一次，口径同 D7） | 同上 |
 
 复现命令：
 
@@ -125,9 +140,14 @@ launch 的 122 个 <param>       ──┘        （后者胜出，但没人一
 
 `fixed_height`（128 arg）与 `integrated_mission`（118 arg）重叠约 90%，任何接线改动都要改两遍。
 
-### ⑤ 工具库越界
+### ⑤ 工具库越界 —— ❌ 已证伪，本项取消
 
-`include/utils/misc_utils.h`（376 行）里混入 13 处 ROS 参数读取。纯工具函数库不该依赖 ROS 参数系统，导致单元测试无法脱离 roscore。
+~~`include/utils/misc_utils.h`（376 行）里混入 13 处 ROS 参数读取。纯工具函数库不该依赖 ROS 参数系统。~~
+
+**P3 期间复查结论**：那 13 处 `param` 出现，是 `misc_utils.h` 里
+`getParam<T>()` **两个重载自身的实现**（`:159` 收指针、`:171` 收引用），
+也就是「读参数的工具」本身，而非「工具库里偷偷读业务参数」。
+这是合法的工具代码，**本项取消，不做任何改动。**
 
 ### ⑥ 构建样板与死路径
 
@@ -240,7 +260,7 @@ flowchart LR
 |---|---|
 | 删除 | `config/real_robot (copy).yaml`、`config/real_robot.yaml.bak`、`CMakeLists.txt` 里的 `/opt/nea/topaz/include` |
 | CMake | 用 `foreach` + 宏消除 13×3 样板；`catkin_install_python` 列表改为脚本目录通配 |
-| 附带 | `include/utils/misc_utils.h` 里 13 处参数读取下沉为显式入参（**这一步放到 P3，因为它会动签名**） |
+| 附带 | ~~`include/utils/misc_utils.h` 里 13 处参数读取下沉为显式入参~~ **已取消**（见 §2⑤ 的复查结论） |
 | 验收 | `catkin_make` 通过；节点启动行为不变 |
 | 风险 | 极低 |
 
@@ -263,9 +283,18 @@ flowchart LR
 | 动作 2 | 上游 `SensorCoveragePlanner3D` 只保留：`std::unique_ptr<MissionController> mission_;` + 必要的钩子调用（目标是把上游 diff 从 +668 行压到 +30 行以内） |
 | 动作 3 | `PlannerParameters` 里的自研字段迁到 `MissionConfig`，`kUseFixedFlightHeight` 等只在上游保留最少必要项 |
 | 动作 4 | `uav_local_planner_node.cpp`（634 行）拆为 `param_loader.cpp` / `ros_io.cpp` / `main.cpp`，算法继续留在已存在的 `uav_local_planner_core` |
-| 动作 5 | `misc_utils.h` 去 ROS 参数依赖，改为显式入参 |
+| 动作 5 | ~~`misc_utils.h` 去 ROS 参数依赖，改为显式入参~~ **已取消**（见 §2⑤） |
 | 验收 | `catkin_make` 通过；用基线同一场景跑一次，对比 `/way_point` 轨迹（应完全一致） |
 | 风险 | 中 —— 需要行为对比 |
+
+**P3 实际结果（与方案偏差）**
+
+| 项 | 方案 | 实际 | 原因 |
+|---|---|---|---|
+| 落点命名 | `manual_goal_navigator` / `fixed_start_planner` / `mission_state_machine` 三个类 | **按功能切分的函数族**：`mission_config`（参数）+ `mission_path_utils`（定高/净空/图导航） | 先切「不依赖类私有状态的纯逻辑」，收益/风险比最高，且不需要动头文件；状态机与回调解耦单独作为 P3c，未做 |
+| 上游 diff 目标 | 压到 **+30 行以内** | 实际 **+479 / −18** | 方案低估了「任务模式 + 回调 + 发布器」的体量：这部分与 ROS 句柄、订阅器绑定，无法搬成自由函数。**但 2059 行自研代码已 100% 落在上游不存在的新文件里**，上游只剩 6 个文件被碰（见 `UPSTREAM_SYNC_CN.md`） |
+| 动作 4（拆 `uav_local_planner_node.cpp`） | 拆为 `param_loader` / `ros_io` / `main` | **未做** | 该文件算法已在 `uav_local_planner_core`（与 ROS 解耦）；node 层 634 行是纯接线，拆分收益低、且会动正在实飞验证的路径 |
+| 动作 5 | `misc_utils.h` 去 ROS 依赖 | **取消** | 见 §2⑤ |
 
 ### P4 — Python 脚本收敛
 
@@ -273,12 +302,12 @@ flowchart LR
 |---|---|
 | 动作 1 | 建 `scripts/tare_uav/` 包，抽出 `mavros.py`（状态判定/解锁/模式切换）、`params.py`、`geometry.py`（路径平滑/偏航） |
 | 动作 2 | `uav_waypoint_bridge.py`（684 行）与 `uav_offboard_manager.py`（230）共用上述模块 |
-| 动作 3 | `uav_exploration_viewer.py`（690）拆成「数据源 / 渲染」两部分 |
-| 动作 4 | 未使用脚本移入 `scripts/_legacy/`（**不直接删**，见决策 D6） |
+| 动作 3 | ~~`uav_exploration_viewer.py`（690）拆成「数据源 / 渲染」两部分~~ **已失效**：该脚本属 AirSim 工作流，已在 P1 删除 |
+| 动作 4 | ~~未使用脚本移入 `scripts/_legacy/`~~ **已改变**：13 个文件在 P1 直接删除（D6 最终确认可直接删） |
 | 验收 | 每个入口脚本 `--help` 可用；bridge 实跑一次话题一致 |
 | 风险 | 低-中 |
 
-### P5 — 上游同步友好化
+### P5 — 上游同步友好化 ✅ 已交付
 
 | 项 | 内容 |
 |---|---|
@@ -286,6 +315,21 @@ flowchart LR
 | 动作 2 | 写 `UPSTREAM_SYNC_CN.md`：记录「哪些上游文件被改、为什么、下次 pull 怎么处理」 |
 | 验收 | `git diff --stat` 中上游文件只剩必要改动 |
 | 风险 | 中 |
+
+**执行结果（逐文件复查，结论：无可再移出项）**
+
+| 上游文件 | +/− | 为什么移不出 | 建议回推上游 | pull 风险 |
+|---|---|---|---|---|
+| `src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp` | +479/−18 | God object，任务模式只能挂这里；P3a/P3b 已把参数与纯逻辑全部搬走 | 抽离部分可 | **高** |
+| `include/sensor_coverage_planner/sensor_coverage_planner_ground.h` | +63/−1 | 同上（现已缩减为「继承 + 薄声明」） | 抽离部分可 | **高** |
+| `src/viewpoint_manager/viewpoint_manager.cpp` | +14/−4 | **真 bug 修复**：上游硬编码 `dimension_=2` 却仍取 `kNumber.z()=40` / `kResolution.z()=0.5`，导致 2D 场景白算 40 层（256000 个 viewpoint，应为 6400） | **是** | 中 |
+| `src/planning_env/planning_env.cpp` | +8/−2 | `planner_cloud_` 是 **private** 成员，外部拿不到，`PublishPlannerCloud()` 只能写在类内；另把 `kExtractFrontierRange.z()` 的硬编码 `2` 改为参数 `kExtractFrontierRangeZ`（该键已进 YAML，回退会破坏参数一致性） | 是 | 低 |
+| `include/planning_env/planning_env.h` | +1/−0 | 同上（声明） | 是 | 低 |
+| `src/navigation_boundary_publisher/navigationBoundary.cpp` | +5/−1 | **修启动竞态**：上游不 latch，订阅者晚启动就永远收不到边界；改为 `advertise(..., 1, true)` + 启动即发一次 | **是** | 低 |
+
+> 结论：**6 个上游文件、合计 +570 / −26 行**，每一处都必需；
+> 其余 **2059 行自研代码 100% 落在上游不存在的文件/目录里**。
+> 详细处理流程见 `UPSTREAM_SYNC_CN.md`。
 
 ---
 
