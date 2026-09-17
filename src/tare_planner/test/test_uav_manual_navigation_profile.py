@@ -23,6 +23,7 @@ UAV_CONFIG_DIR = PACKAGE_ROOT / "config" / "uav"
 RVIZ_PATH = PACKAGE_ROOT / "rviz" / "vehicle_simulator.rviz"
 PLANNER_SOURCE_PATH = (PACKAGE_ROOT / "src" / "sensor_coverage_planner" /
                        "sensor_coverage_planner_ground.cpp")
+MISSION_SOURCE_DIR = PACKAGE_ROOT / "src" / "mission"
 
 FIND_PREFIX = "$(find tare_planner)/"
 
@@ -100,6 +101,10 @@ class UavManualNavigationProfileTest(unittest.TestCase):
         cls.config_text = merged_config_text()
         cls.rviz = RVIZ_PATH.read_text(encoding="utf-8")
         cls.planner_source = PLANNER_SOURCE_PATH.read_text(encoding="utf-8")
+        # P3b 把连通图搜索 / 目标净空判断 / 定高计算搬到了 mission/ 模块。
+        # 这里把任务层源码一并纳入检查，断言意图（核心使用连通图搜索）不变。
+        cls.runtime_source = cls.planner_source + "\n" + "\n".join(
+            path.read_text(encoding="utf-8") for path in sorted(MISSION_SOURCE_DIR.glob("*.cpp")))
 
     # ---------------------------------------------------------------- 接线
     def test_standard_rviz_goal_is_wired_to_tare(self):
@@ -160,9 +165,9 @@ class UavManualNavigationProfileTest(unittest.TestCase):
     # ------------------------------------------------------------ 核心逻辑
     def test_core_uses_connected_graph_and_goal_clearance(self):
         self.assertIn("MissionMode::NAVIGATION", self.planner_source)
-        self.assertIn("GetClosestConnectedNodeIndAndDistance", self.planner_source)
+        self.assertIn("GetClosestConnectedNodeIndAndDistance", self.runtime_source)
         self.assertIn("GetShortestPath(start, goal, true, graph_path, true)",
-                      self.planner_source)
+                      self.runtime_source)
 
 
 if __name__ == "__main__":

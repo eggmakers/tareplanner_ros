@@ -86,7 +86,8 @@ add_tare_library(exploration_path src/exploration_path/exploration_path.cpp ${PC
 add_tare_library(tare_visualizer src/tare_visualizer/tare_visualizer.cpp ${PCL_LIBRARIES})
 ## 自研任务层（定高飞行 / 目标导航 / 固定起点规划）
 add_tare_library(mission_config src/mission/mission_config.cpp)
-add_tare_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer mission_config)
+add_tare_library(mission_path_utils src/mission/mission_path_utils.cpp mission_config keypose_graph)
+add_tare_library(sensor_coverage_planner_ground src/sensor_coverage_planner/sensor_coverage_planner_ground.cpp graph planning_env keypose_graph viewpoint_manager pointcloud_manager grid_world local_coverage_planner tare_visualizer mission_config mission_path_utils)
 
 ## ---- 可执行节点 ----------------------------------------------------------
 add_tare_node(navigationBoundary src/navigation_boundary_publisher/navigationBoundary.cpp ${PCL_LIBRARIES})

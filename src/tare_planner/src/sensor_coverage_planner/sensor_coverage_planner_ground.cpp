@@ -12,6 +12,7 @@
 #include "sensor_coverage_planner/sensor_coverage_planner_ground.h"
 #include "graph/graph.h"
 #include "mission/mission_config.h"
+#include "mission/mission_path_utils.h"
 
 namespace sensor_coverage_planner_3d_ns
 {
@@ -687,34 +688,9 @@ void SensorCoveragePlanner3D::CancelNavigationCallback(const std_msgs::Bool::Con
 
 bool SensorCoveragePlanner3D::ManualGoalHasClearance(const geometry_msgs::Point& goal) const
 {
-  int nearby_point_count = 0;
-  const double clearance_squared = pp_.kManualGoalClearance * pp_.kManualGoalClearance;
-  const auto count_nearby_points = [&](const pcl::PointCloud<pcl::PointXYZI>::ConstPtr& cloud) {
-    if (!cloud)
-    {
-      return;
-    }
-    for (const auto& point : cloud->points)
-    {
-      if (std::abs(point.z - goal.z) > pp_.kManualGoalVerticalClearance)
-      {
-        continue;
-      }
-      const double dx = point.x - goal.x;
-      const double dy = point.y - goal.y;
-      if (dx * dx + dy * dy <= clearance_squared && ++nearby_point_count >= 2)
-      {
-        return;
-      }
-    }
-  };
-
-  count_nearby_points(pd_.collision_cloud_->cloud_);
-  if (nearby_point_count < 2)
-  {
-    count_nearby_points(pd_.registered_cloud_->cloud_);
-  }
-  return nearby_point_count < 2;
+  // 纯函数实现见 mission/mission_path_utils.cpp
+  return mission_ns::GoalHasClearance(pp_, goal, pd_.collision_cloud_->cloud_,
+                                      pd_.registered_cloud_->cloud_);
 }
 
 bool SensorCoveragePlanner3D::BuildGraphNavigationPath(const geometry_msgs::Point& start,
@@ -722,111 +698,11 @@ bool SensorCoveragePlanner3D::BuildGraphNavigationPath(const geometry_msgs::Poin
                                                        nav_msgs::Path& path,
                                                        std::string& failure_reason)
 {
-  path = nav_msgs::Path();
-  path.header.frame_id = kWorldFrameID;
-  path.header.stamp = ros::Time::now();
-
-  if (pd_.keypose_graph_->GetConnectedNodeNum() < 1)
-  {
-    failure_reason = "the explored keypose graph is empty";
-    return false;
-  }
-
-  int closest_goal_node = -1;
-  double distance_to_graph = std::numeric_limits<double>::max();
-  pd_.keypose_graph_->GetClosestConnectedNodeIndAndDistance(goal, closest_goal_node, distance_to_graph);
-  if (closest_goal_node < 0 || !std::isfinite(distance_to_graph) ||
-      distance_to_graph > pp_.kManualGoalMaxGraphDistance)
-  {
-    failure_reason = "goal is outside the connected explored area (nearest graph distance=" +
-                     std::to_string(distance_to_graph) + " m, limit=" +
-                     std::to_string(pp_.kManualGoalMaxGraphDistance) + " m)";
-    return false;
-  }
-
-  const geometry_msgs::Point graph_anchor = pd_.keypose_graph_->GetNodePosition(closest_goal_node);
-  const double segment_x = goal.x - graph_anchor.x;
-  const double segment_y = goal.y - graph_anchor.y;
-  const double segment_length_squared = segment_x * segment_x + segment_y * segment_y;
-  const double clearance_squared = pp_.kManualGoalClearance * pp_.kManualGoalClearance;
-  int segment_collision_points = 0;
-  const auto segment_is_clear = [&](const pcl::PointCloud<pcl::PointXYZI>::ConstPtr& cloud) {
-    if (!cloud)
-    {
-      return true;
-    }
-    for (const auto& point : cloud->points)
-    {
-      if (std::abs(point.z - goal.z) > pp_.kManualGoalVerticalClearance)
-      {
-        continue;
-      }
-      double projection = 0.0;
-      if (segment_length_squared > 1e-6)
-      {
-        projection = ((point.x - graph_anchor.x) * segment_x + (point.y - graph_anchor.y) * segment_y) /
-                     segment_length_squared;
-        projection = std::max(0.0, std::min(1.0, projection));
-      }
-      const double nearest_x = graph_anchor.x + projection * segment_x;
-      const double nearest_y = graph_anchor.y + projection * segment_y;
-      const double dx = point.x - nearest_x;
-      const double dy = point.y - nearest_y;
-      if (dx * dx + dy * dy <= clearance_squared && ++segment_collision_points >= 2)
-      {
-        return false;
-      }
-    }
-    return true;
-  };
-  if (!segment_is_clear(pd_.collision_cloud_->cloud_) ||
-      !segment_is_clear(pd_.registered_cloud_->cloud_))
-  {
-    failure_reason = "the final connection from the explored graph to the goal is obstructed";
-    return false;
-  }
-
-  nav_msgs::Path graph_path;
-  const double path_length =
-      pd_.keypose_graph_->GetShortestPath(start, goal, true, graph_path, true);
-  if (!std::isfinite(path_length) || path_length >= std::numeric_limits<double>::max() / 2.0 ||
-      graph_path.poses.empty())
-  {
-    failure_reason = "no connected path exists through the explored keypose graph";
-    return false;
-  }
-
-  const double flight_height = GetFixedFlightHeightOr(start.z);
-  const auto append_point = [&](const geometry_msgs::Point& point) {
-    geometry_msgs::PoseStamped pose;
-    pose.header = path.header;
-    pose.pose.position = point;
-    pose.pose.position.z = flight_height;
-    pose.pose.orientation.w = 1.0;
-    if (!path.poses.empty())
-    {
-      const auto& last = path.poses.back().pose.position;
-      if (std::hypot(last.x - pose.pose.position.x, last.y - pose.pose.position.y) < 0.05)
-      {
-        path.poses.back() = pose;
-        return;
-      }
-    }
-    path.poses.push_back(pose);
-  };
-
-  append_point(start);
-  for (const auto& graph_pose : graph_path.poses)
-  {
-    append_point(graph_pose.pose.position);
-  }
-  append_point(goal);
-
-  if (path.poses.size() < 2)
-  {
-    append_point(goal);
-  }
-  return !path.poses.empty();
+  // 实现见 mission/mission_path_utils.cpp（吸附到连通图 -> 检查末段净空 -> 图最短路 -> 统一高度）
+  return mission_ns::BuildGraphNavigationPath(pp_, pd_.initial_position_.z(), kWorldFrameID,
+                                              pd_.keypose_graph_.get(), pd_.collision_cloud_->cloud_,
+                                              pd_.registered_cloud_->cloud_, start, goal, path,
+                                              failure_reason);
 }
 
 bool SensorCoveragePlanner3D::BuildManualNavigationPath(nav_msgs::Path& path, std::string& failure_reason)
@@ -974,12 +850,8 @@ void SensorCoveragePlanner3D::ExecuteManualNavigation()
 
 double SensorCoveragePlanner3D::GetFixedFlightHeightOr(double fallback_z) const
 {
-  if (!pp_.kUseFixedFlightHeight)
-  {
-    return fallback_z;
-  }
-  double base_height = pp_.kFixedFlightHeightRelativeToStart ? pd_.initial_position_.z() : 0.0;
-  return base_height + pp_.kFixedFlightHeight;
+  // 纯函数实现见 mission/mission_path_utils.cpp
+  return mission_ns::FixedFlightHeight(pp_, fallback_z, pd_.initial_position_.z());
 }
 
 void SensorCoveragePlanner3D::SendInitialWaypoint()
