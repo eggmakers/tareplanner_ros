@@ -1,70 +1,52 @@
 <launch>
-    <!-- Single-command UAV stack with exclusive mission-source arbitration. -->
-    <arg name="rviz" default="true"/>
-    <arg name="rviz_config" default="$(find tare_planner)/rviz/vehicle_simulator.rviz"/>
-    <arg name="default_mission_mode" default="tare"/>
+    <!-- ============ 整合任务入口（第二入口）============
 
-    <!-- One authoritative height shared by TARE, mux, exporter, replay, and saved-map A*. -->
+         在主入口 tare_uav_fixed_height.launch 之上，额外接入：
+           mission mux / route exporter / route replayer / bundle validator /
+           saved-map A*，并把 TARE 的输出改指 mux 的 source 话题。
+
+         P2' 重构原则：本文件只留两类东西
+           1) 接线（谁连谁）—— 话题改指、mux 的 source / command 命名
+           2) 与主入口默认值【确实不同】的少量覆盖
+         其余参数不再在本文件写默认值：不传 ⇒ 主入口用它自己的默认
+         （最终来自 config/uav/*.yaml）。
+
+         改参数请优先改 config/uav/*.yaml；只有下面「真差异」那 5 个值
+         是本入口有意与默认不同的，改它们才需要动本文件。
+    -->
+
+    <!-- ======== 1. 真差异：本入口有意覆盖主入口默认值 ======== -->
+    <!-- max_z_* 与 takeoff_stabilization_seconds 在本入口用另一套更保守的值
+         （YAML 默认 max_z_speed=0.35 / accel=0.25 / jerk=0.5 / takeoff=3.0） -->
+    <arg name="max_z_speed" default="0.20"/>
+    <arg name="max_z_accel" default="0.15"/>
+    <arg name="max_z_jerk" default="0.30"/>
+    <arg name="takeoff_stabilization_seconds" default="5.0"/>
+    <arg name="navigation_boundary_file" default="/data/tunnel_boundary.ply"/>
+
+    <!-- ======== 2. 本入口自有节点也要消费的共享值 ========
+         这些值同时被 exporter / replayer / saved-map 以 type="double" 解析，
+         传 "" 会让 roslaunch 解析失败，因此必须显式声明。
+         已核对：与 config/uav/*.yaml 一致。 -->
+    <arg name="map_frame" default="map"/>
     <arg name="fixed_flight_height" default="1.5"/>
     <arg name="fixed_flight_height_relative_to_start" default="false"/>
-
-    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
-    <arg name="external_cloud_topic" default="/cloud_registered"/>
-    <arg name="run_input_bridge" default="true"/>
-    <arg name="run_static_tf_bridge" default="false"/>
-    <arg name="map_frame" default="map"/>
-    <arg name="map_to_camera_init_yaw" default="0.0"/>
-    <arg name="sensor_to_vehicle_yaw" default="0.0"/>
-
-    <arg name="run_tare_planner" default="true"/>
-    <arg name="run_uav_local_planner" default="true"/>
     <arg name="local_path_lookahead" default="1.5"/>
     <arg name="uav_horizontal_clearance" default="0.75"/>
     <arg name="uav_vertical_clearance" default="0.35"/>
-    <arg name="local_obstacle_range" default="6.0"/>
-    <arg name="local_reaction_time" default="0.20"/>
-    <arg name="local_max_deceleration" default="0.20"/>
-    <arg name="local_candidate_angle_step_degrees" default="15.0"/>
-    <arg name="local_candidate_angle_count" default="6"/>
-
-    <!-- Optional exploration boundary and independent command-side safety fence. -->
-    <arg name="run_navigation_boundary" default="false"/>
-    <arg name="navigation_boundary_file" default="/data/tunnel_boundary.ply"/>
-    <arg name="safety_geofence" default="false"/>
-    <arg name="safety_geofence_file" default=""/>
-
     <arg name="vehicle_length" default="0.45298"/>
     <arg name="vehicle_width" default="0.45298"/>
     <arg name="vehicle_height" default="0.17139"/>
     <arg name="vehicle_mass" default="3.0"/>
 
-    <arg name="max_xy_speed" default="0.35"/>
-    <arg name="max_xy_accel" default="0.20"/>
-    <arg name="max_xy_jerk" default="0.60"/>
-    <arg name="max_z_speed" default="0.20"/>
-    <arg name="max_z_accel" default="0.15"/>
-    <arg name="max_z_jerk" default="0.30"/>
-    <arg name="max_yaw_rate" default="0.35"/>
-    <arg name="heading_alignment_enabled" default="true"/>
-    <arg name="heading_alignment_tolerance" default="0.26"/>
-    <arg name="takeoff_stabilization_seconds" default="5.0"/>
-    <arg name="start_exploration_after_takeoff" default="true"/>
-
-    <arg name="run_offboard_manager" default="false"/>
-    <arg name="auto_arm" default="false"/>
-    <arg name="rc_override_enabled" default="false"/>
-    <arg name="rc_override_channel" default="5"/>
-    <arg name="rc_override_pwm" default="1900"/>
-
-    <arg name="tare_sensor_range" default="5.0"/>
-    <arg name="exploration_completion_confirm_seconds" default="8.0"/>
-    <arg name="manual_goal_max_graph_distance" default="2.0"/>
-
-    <!-- Route/map handoff. map_file may be the Fast-LIO PCD output. -->
+    <!-- ======== 3. 本入口独有的开关与参数 ======== -->
+    <arg name="default_mission_mode" default="tare"/>
     <arg name="run_path_exporter" default="true"/>
     <arg name="run_path_replayer" default="true"/>
     <arg name="run_bundle_validator" default="false"/>
     <arg name="run_saved_map_planner" default="false"/>
+
+    <!-- Route/map handoff. map_file 可以是 Fast-LIO 输出的 PCD。 -->
     <arg name="bundle_dir" default="$(env HOME)/tare_uav_handoff"/>
     <arg name="route_file" default="$(arg bundle_dir)/uav_route.json"/>
     <arg name="map_file" default=""/>
@@ -78,21 +60,10 @@
     <arg name="saved_map_offset_z" default="0.0"/>
     <arg name="saved_map_offset_yaw" default="0.0"/>
 
+    <!-- ======== 4. 主入口：只改接线 + 传真差异 ======== -->
     <include file="$(find tare_planner)/launch/tare_uav_fixed_height.launch">
-        <arg name="rviz" value="$(arg rviz)"/>
-        <arg name="rviz_config" value="$(arg rviz_config)"/>
-        <arg name="run_tare_planner" value="$(arg run_tare_planner)"/>
-        <arg name="fixed_flight_height" value="$(arg fixed_flight_height)"/>
-        <arg name="fixed_flight_height_relative_to_start"
-             value="$(arg fixed_flight_height_relative_to_start)"/>
-        <arg name="external_odom_topic" value="$(arg external_odom_topic)"/>
-        <arg name="external_cloud_topic" value="$(arg external_cloud_topic)"/>
-        <arg name="run_input_bridge" value="$(arg run_input_bridge)"/>
-        <arg name="run_static_tf_bridge" value="$(arg run_static_tf_bridge)"/>
-        <arg name="map_frame" value="$(arg map_frame)"/>
-        <arg name="map_to_camera_init_yaw" value="$(arg map_to_camera_init_yaw)"/>
-        <arg name="sensor_to_vehicle_yaw" value="$(arg sensor_to_vehicle_yaw)"/>
-
+        <!-- 接线：TARE 输出改指 mux 的 source，局部规划器输入改指 mux 的 command。
+             这 5 个是"谁连谁"，必须显式。 -->
         <arg name="waypoint_topic" value="/tare_uav/source/tare/waypoint"/>
         <arg name="manual_goal_topic" value="/tare_uav/source/tare/goal"/>
         <arg name="fixed_start_goal_topic" value="/tare_uav/source/fixed_start/goal"/>
@@ -100,46 +71,12 @@
         <arg name="local_planner_reference_path_topic"
              value="/tare_uav/command/reference_path"/>
 
-        <arg name="run_uav_local_planner" value="$(arg run_uav_local_planner)"/>
-        <arg name="local_path_lookahead" value="$(arg local_path_lookahead)"/>
-        <arg name="uav_horizontal_clearance" value="$(arg uav_horizontal_clearance)"/>
-        <arg name="uav_vertical_clearance" value="$(arg uav_vertical_clearance)"/>
-        <arg name="local_obstacle_range" value="$(arg local_obstacle_range)"/>
-        <arg name="local_reaction_time" value="$(arg local_reaction_time)"/>
-        <arg name="local_max_deceleration" value="$(arg local_max_deceleration)"/>
-        <arg name="local_candidate_angle_step_degrees"
-             value="$(arg local_candidate_angle_step_degrees)"/>
-        <arg name="local_candidate_angle_count" value="$(arg local_candidate_angle_count)"/>
-        <arg name="run_navigation_boundary" value="$(arg run_navigation_boundary)"/>
-        <arg name="navigation_boundary_file" value="$(arg navigation_boundary_file)"/>
-        <arg name="safety_geofence" value="$(arg safety_geofence)"/>
-        <arg name="safety_geofence_file" value="$(arg safety_geofence_file)"/>
-        <arg name="vehicle_length" value="$(arg vehicle_length)"/>
-        <arg name="vehicle_width" value="$(arg vehicle_width)"/>
-        <arg name="vehicle_height" value="$(arg vehicle_height)"/>
-        <arg name="vehicle_mass" value="$(arg vehicle_mass)"/>
-
-        <arg name="max_xy_speed" value="$(arg max_xy_speed)"/>
-        <arg name="max_xy_accel" value="$(arg max_xy_accel)"/>
-        <arg name="max_xy_jerk" value="$(arg max_xy_jerk)"/>
+        <!-- 只传与主入口默认值不同的项 -->
         <arg name="max_z_speed" value="$(arg max_z_speed)"/>
         <arg name="max_z_accel" value="$(arg max_z_accel)"/>
         <arg name="max_z_jerk" value="$(arg max_z_jerk)"/>
-        <arg name="max_yaw_rate" value="$(arg max_yaw_rate)"/>
-        <arg name="heading_alignment_enabled" value="$(arg heading_alignment_enabled)"/>
-        <arg name="heading_alignment_tolerance" value="$(arg heading_alignment_tolerance)"/>
         <arg name="takeoff_stabilization_seconds" value="$(arg takeoff_stabilization_seconds)"/>
-        <arg name="start_exploration_after_takeoff" value="$(arg start_exploration_after_takeoff)"/>
-        <arg name="run_offboard_manager" value="$(arg run_offboard_manager)"/>
-        <arg name="auto_arm" value="$(arg auto_arm)"/>
-        <arg name="rc_override_enabled" value="$(arg rc_override_enabled)"/>
-        <arg name="rc_override_channel" value="$(arg rc_override_channel)"/>
-        <arg name="rc_override_pwm" value="$(arg rc_override_pwm)"/>
-        <arg name="tare_sensor_range" value="$(arg tare_sensor_range)"/>
-        <arg name="exploration_completion_confirm_seconds"
-             value="$(arg exploration_completion_confirm_seconds)"/>
-        <arg name="manual_goal_max_graph_distance"
-             value="$(arg manual_goal_max_graph_distance)"/>
+        <arg name="navigation_boundary_file" value="$(arg navigation_boundary_file)"/>
     </include>
 
     <node pkg="tare_planner" type="uav_mission_mux.py" name="uav_mission_mux"

@@ -20,6 +20,8 @@
 | P3b 逻辑抽离 | `308cd4e` | 新增 `mission_ns` 定高 / 目标净空 / 连通图导航；planner 三个成员函数变薄委托（**头文件一字未改，13 处调用点不动**）；planner `1935→1843` 行 |
 | P5 上游友好化 | 随 P3 一并提交 | 复查 6 个上游文件的**每一处**改动，确认无可再移出项（结论见 §4-P5）；交付 `UPSTREAM_SYNC_CN.md` |
 
+| P2' 整合入口解耦 | 见提交 | `tare_uav_integrated_mission.launch` 220→157 行、`<arg>` 118→42；删除约 40 个与主入口/YAML 重复的默认值；第二入口 9 节点 / 7 文件 / 239 参数与改造前**逐项一致** |
+
 ### 验收结果（用你那条原命令，不启动 master 解析）
 
 | 检查项 | 结果 |
@@ -56,7 +58,7 @@ diff refactor_tools/baseline/params.txt refactor_tools/after_p2/params.txt   # �
 | config 拆分方式 | 按主题拆 8 个（topics/frames/limits/...） | 按**节点**拆 6 个 | `<rosparam>` 是相对节点命名空间加载的，一个文件无法跨节点共享同名键，按节点拆才不会互相污染 |
 | launch 的 arg 数量 | 收缩到 ≤8 | 13 个开关 + 33 个接线 + 42 个覆盖 = 77 | D4 要求你的原命令逐字可用；这些 arg 默认值全为 `""`，**不重复任何默认数字**，是"覆盖层"而非第二份配置 |
 | frame 名 | 放 `frames.yaml` | 由 `map_frame` arg 统管 | `planning_frame` / `frame_id` 只有一个值、三处使用，用 arg 保证一致 |
-| `tare_uav_integrated_mission.launch` | 一并重构 | **未重构**，保持 220 行旧结构 | 控制改动面；已把它的 53 个传参全部补齐，可正常加载。它仍保留自己的重复参数，建议后续单独做 P2' |
+| `tare_uav_integrated_mission.launch` | 一并重构 | **P2 时未重构**（已由 P2' 补做：220→157 行、`<arg>` 118→42） | 控制改动面；已把它的 53 个传参全部补齐，可正常加载。它仍保留自己的重复参数，已由 P2' 补做 |
 | `explore*.launch` | —— | **保留** | 它们是上游 TARE 的通用入口（不依赖 wheeltec），删除不属于"移除 wheeltec 支持"；如需一并删除请告知 |
 
 ### 顺带修掉的问题

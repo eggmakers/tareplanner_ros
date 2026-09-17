@@ -1,0 +1,34 @@
+  bundle_dir (default "/home/l/tare_uav_handoff"): undocumented
+  copy_map_to_bundle (default "true"): undocumented
+  default_mission_mode (default "tare"): undocumented
+  fixed_flight_height (default "1.5"): undocumented
+  fixed_flight_height_relative_to_start (default "false"): undocumented
+  local_path_lookahead (default "1.5"): undocumented
+  map_file: undocumented
+  map_frame (default "map"): undocumented
+  max_z_accel (default "0.15"): undocumented
+  max_z_jerk (default "0.30"): undocumented
+  max_z_speed (default "0.20"): undocumented
+  navigation_boundary_file (default "/data/tunnel_boundary.ply"): undocumented
+  route_file (default "/home/l/tare_uav_handoff/uav_route.json"): undocumented
+  run_bundle_validator (default "false"): undocumented
+  run_path_exporter (default "true"): undocumented
+  run_path_replayer (default "true"): undocumented
+  run_saved_map_planner (default "false"): undocumented
+  saved_map_goal_snap_radius (default "1.0"): undocumented
+  saved_map_offset_x (default "0.0"): undocumented
+  saved_map_offset_y (default "0.0"): undocumented
+  saved_map_offset_yaw (default "0.0"): undocumented
+  saved_map_offset_z (default "0.0"): undocumented
+  saved_map_path_spacing (default "0.30"): undocumented
+  saved_map_resolution (default "0.20"): undocumented
+  saved_map_use_explicit_start (default "false"): undocumented
+  takeoff_stabilization_seconds (default "5.0"): undocumented
+  uav_horizontal_clearance (default "0.75"): undocumented
+  uav_vertical_clearance (default "0.35"): undocumented
+  vehicle_height (default "0.17139"): undocumented
+  vehicle_length (default "0.45298"): undocumented
+  vehicle_mass (default "3.0"): undocumented
+  vehicle_width (default "0.45298"): undocumented
+Optional Arguments:
+Required Arguments:
