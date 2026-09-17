@@ -4,3 +4,7 @@ build/
 devel/
 .runtime/
 docker/plan_a/blocks_smoke_report.json
+
+# Python 字节码（禁止提交）
+__pycache__/
+*.pyc
