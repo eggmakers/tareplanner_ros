@@ -11,6 +11,8 @@
 
 #include "sensor_coverage_planner/sensor_coverage_planner_ground.h"
 #include "graph/graph.h"
+#include "mission/mission_config.h"
+#include "mission/mission_path_utils.h"
 
 namespace sensor_coverage_planner_3d_ns
 {
@@ -65,6 +67,13 @@ bool PlannerParameters::ReadParameters(ros::NodeHandle& nh)
   kDirectionNoChangeCounterThr = misc_utils_ns::getParam<int>(nh, "kDirectionNoChangeCounterThr", 5);
   kResetWaypointJoystickAxesID = misc_utils_ns::getParam<int>(nh, "kResetWaypointJoystickAxesID", 0);
 
+  // 任务层参数（定高飞行 / RViz 目标导航 / 固定起点规划 + /tare_uav/* 话题）。
+  // 读取与合法性校验都封装在 MissionConfig 内，参数名/默认值/错误信息和以前一致。
+  if (!MissionConfig::LoadFromRos(nh))
+  {
+    return false;
+  }
+
   return true;
 }
 
@@ -118,6 +127,7 @@ void PlannerData::Initialize(ros::NodeHandle& nh, ros::NodeHandle& nh_p)
   initial_position_.x() = 0.0;
   initial_position_.y() = 0.0;
   initial_position_.z() = 0.0;
+  initial_position_set_ = false;
 
   cur_keypose_node_ind_ = 0;
 
@@ -172,6 +182,11 @@ SensorCoveragePlanner3D::SensorCoveragePlanner3D(ros::NodeHandle& nh, ros::NodeH
   , use_momentum_(false)
   , lookahead_point_in_line_of_sight_(true)
   , reset_waypoint_(false)
+  , exploration_completion_pending_(false)
+  , manual_goal_reached_(false)
+  , manual_goal_arrival_pending_(false)
+  , hold_position_set_(false)
+  , mission_mode_(MissionMode::EXPLORATION)
   , registered_cloud_count_(0)
   , keypose_count_(0)
   , direction_change_count_(0)
@@ -192,6 +207,21 @@ bool SensorCoveragePlanner3D::initialize(ros::NodeHandle& nh, ros::NodeHandle& n
   }
 
   pd_.Initialize(nh, nh_p);
+
+  if (pp_.kUseFixedFlightHeight)
+  {
+    ROS_INFO_STREAM("Fixed-height UAV mode enabled: waypoint/planning z = "
+                    << (pp_.kFixedFlightHeightRelativeToStart ? "initial_z + " : "")
+                    << pp_.kFixedFlightHeight);
+  }
+  if (pp_.kEnableManualGoalNavigation)
+  {
+    ROS_WARN_STREAM("RViz 2D Nav Goal enabled: explored-graph limit=" << pp_.kManualGoalMaxGraphDistance
+                                                                      << " m, goal clearance="
+                                                                      << pp_.kManualGoalClearance
+                                                                      << " m, arrival radius="
+                                                                      << pp_.kManualGoalArrivalRadius << " m");
+  }
 
   pd_.keypose_graph_->SetAllowVerticalEdge(false);
 
@@ -218,6 +248,16 @@ bool SensorCoveragePlanner3D::initialize(ros::NodeHandle& nh, ros::NodeHandle& n
       nh.subscribe(pp_.sub_joystick_topic_, 1, &SensorCoveragePlanner3D::JoystickCallback, this);
   reset_waypoint_sub_ =
       nh.subscribe(pp_.sub_reset_waypoint_topic_, 1, &SensorCoveragePlanner3D::ResetWaypointCallback, this);
+  manual_goal_sub_ =
+      nh.subscribe(pp_.sub_manual_goal_topic_, 1, &SensorCoveragePlanner3D::ManualGoalCallback, this);
+  fixed_start_goal_sub_ = nh.subscribe(pp_.sub_fixed_start_goal_topic_, 1,
+                                       &SensorCoveragePlanner3D::FixedStartGoalCallback, this);
+  pause_mission_sub_ =
+      nh.subscribe(pp_.sub_pause_mission_topic_, 1, &SensorCoveragePlanner3D::PauseMissionCallback, this);
+  resume_exploration_sub_ = nh.subscribe(pp_.sub_resume_exploration_topic_, 1,
+                                         &SensorCoveragePlanner3D::ResumeExplorationCallback, this);
+  cancel_navigation_sub_ = nh.subscribe(pp_.sub_cancel_navigation_topic_, 1,
+                                        &SensorCoveragePlanner3D::CancelNavigationCallback, this);
 
   global_path_full_publisher_ = nh.advertise<nav_msgs::Path>("global_path_full", 1);
   global_path_publisher_ = nh.advertise<nav_msgs::Path>("global_path", 1);
@@ -230,31 +270,61 @@ bool SensorCoveragePlanner3D::initialize(ros::NodeHandle& nh, ros::NodeHandle& n
   runtime_breakdown_pub_ = nh.advertise<std_msgs::Int32MultiArray>(pp_.pub_runtime_breakdown_topic_, 2);
   runtime_pub_ = nh.advertise<std_msgs::Float32>(pp_.pub_runtime_topic_, 2);
   momentum_activation_count_pub_ = nh.advertise<std_msgs::Int32>(pp_.pub_momentum_activation_count_topic_, 2);
+  manual_navigation_path_pub_ = nh.advertise<nav_msgs::Path>(pp_.pub_manual_navigation_path_topic_, 1, true);
+  manual_navigation_goal_pub_ =
+      nh.advertise<geometry_msgs::PointStamped>(pp_.pub_manual_navigation_goal_topic_, 1, true);
+  mission_mode_pub_ = nh.advertise<std_msgs::String>(pp_.pub_mission_mode_topic_, 1, true);
+  navigation_active_pub_ = nh.advertise<std_msgs::Bool>(pp_.pub_navigation_active_topic_, 1, true);
+  navigation_reached_pub_ = nh.advertise<std_msgs::Bool>(pp_.pub_navigation_reached_topic_, 1, true);
+  fixed_start_path_pub_ = nh.advertise<nav_msgs::Path>(pp_.pub_fixed_start_path_topic_, 1, true);
+  fixed_start_goal_pub_ =
+      nh.advertise<geometry_msgs::PointStamped>(pp_.pub_fixed_start_goal_topic_, 1, true);
+  fixed_start_status_pub_ = nh.advertise<std_msgs::String>(pp_.pub_fixed_start_status_topic_, 1, true);
+  exploration_start_pose_pub_ =
+      nh.advertise<geometry_msgs::PoseStamped>(pp_.pub_exploration_start_pose_topic_, 1, true);
   // Debug
   pointcloud_manager_neighbor_cells_origin_pub_ =
       nh.advertise<geometry_msgs::PointStamped>("pointcloud_manager_neighbor_cells_origin", 1);
+
+  PublishMissionState("EXPLORATION");
 
   return true;
 }
 
 void SensorCoveragePlanner3D::ExplorationStartCallback(const std_msgs::Bool::ConstPtr& start_msg)
 {
-  if (start_msg->data)
+  if (start_msg->data && !start_exploration_)
   {
     start_exploration_ = true;
+    start_time_ = ros::Time::now();
+    global_direction_switch_time_ = start_time_;
+    exploration_completion_pending_ = false;
+    ROS_INFO("Exploration start accepted; processing registered scans");
   }
 }
 
 void SensorCoveragePlanner3D::StateEstimationCallback(const nav_msgs::Odometry::ConstPtr& state_estimation_msg)
 {
   pd_.robot_position_ = state_estimation_msg->pose.pose.position;
-  // Todo: use a boolean
-  if (std::abs(pd_.initial_position_.x()) < 0.01 && std::abs(pd_.initial_position_.y()) < 0.01 &&
-      std::abs(pd_.initial_position_.z()) < 0.01)
+  if (!pd_.initial_position_set_)
   {
     pd_.initial_position_.x() = pd_.robot_position_.x;
     pd_.initial_position_.y() = pd_.robot_position_.y;
     pd_.initial_position_.z() = pd_.robot_position_.z;
+    pd_.initial_position_set_ = true;
+
+    geometry_msgs::PoseStamped start_pose;
+    start_pose.header = state_estimation_msg->header;
+    start_pose.header.frame_id = kWorldFrameID;
+    start_pose.pose = state_estimation_msg->pose.pose;
+    exploration_start_pose_pub_.publish(start_pose);
+    ROS_INFO_STREAM("Recorded UAV exploration start pose at [" << start_pose.pose.position.x << ", "
+                                                                 << start_pose.pose.position.y << ", "
+                                                                 << start_pose.pose.position.z << "]");
+  }
+  if (pp_.kUseFixedFlightHeight)
+  {
+    pd_.robot_position_.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
   }
   double roll, pitch, yaw;
   geometry_msgs::Quaternion geo_quat = state_estimation_msg->pose.pose.orientation;
@@ -275,7 +345,7 @@ void SensorCoveragePlanner3D::StateEstimationCallback(const nav_msgs::Odometry::
 
 void SensorCoveragePlanner3D::RegisteredScanCallback(const sensor_msgs::PointCloud2ConstPtr& registered_scan_msg)
 {
-  if (!initialized_)
+  if (!initialized_ || (!pp_.kAutoStart && !start_exploration_))
   {
     return;
   }
@@ -423,7 +493,7 @@ void SensorCoveragePlanner3D::JoystickCallback(const sensor_msgs::Joy::ConstPtr&
       waypoint.header.stamp = ros::Time::now();
       waypoint.point.x = pd_.robot_position_.x;
       waypoint.point.y = pd_.robot_position_.y;
-      waypoint.point.z = pd_.robot_position_.z;
+      waypoint.point.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
       waypoint_pub_.publish(waypoint);
       std::cout << "reset waypoint" << std::endl;
     }
@@ -440,9 +510,348 @@ void SensorCoveragePlanner3D::ResetWaypointCallback(const std_msgs::Empty::Const
   waypoint.header.stamp = ros::Time::now();
   waypoint.point.x = pd_.robot_position_.x;
   waypoint.point.y = pd_.robot_position_.y;
-  waypoint.point.z = pd_.robot_position_.z;
+  waypoint.point.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
   waypoint_pub_.publish(waypoint);
   std::cout << "reset waypoint" << std::endl;
+}
+
+void SensorCoveragePlanner3D::ManualGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& goal_msg)
+{
+  if (!pp_.kEnableManualGoalNavigation)
+  {
+    ROS_WARN("Ignoring RViz navigation goal because manual goal navigation is disabled");
+    return;
+  }
+  if (!initialized_)
+  {
+    ROS_WARN("Rejecting RViz navigation goal: state estimation is not ready");
+    return;
+  }
+  if (!goal_msg->header.frame_id.empty() && goal_msg->header.frame_id != kWorldFrameID)
+  {
+    ROS_ERROR_STREAM("Rejecting RViz navigation goal in frame '" << goal_msg->header.frame_id
+                                                                  << "'; expected '" << kWorldFrameID << "'");
+    return;
+  }
+  if (!std::isfinite(goal_msg->pose.position.x) || !std::isfinite(goal_msg->pose.position.y))
+  {
+    ROS_ERROR("Rejecting RViz navigation goal with non-finite coordinates");
+    return;
+  }
+
+  const geometry_msgs::Point previous_goal = manual_goal_;
+  manual_goal_ = goal_msg->pose.position;
+  manual_goal_.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
+
+  if (!ManualGoalHasClearance(manual_goal_))
+  {
+    manual_goal_ = previous_goal;
+    ROS_ERROR_STREAM("Rejecting RViz navigation goal: obstacle points are within "
+                     << pp_.kManualGoalClearance << " m of the target");
+    return;
+  }
+
+  nav_msgs::Path path;
+  std::string failure_reason;
+  if (!BuildManualNavigationPath(path, failure_reason))
+  {
+    manual_goal_ = previous_goal;
+    ROS_ERROR_STREAM("Rejecting RViz navigation goal: " << failure_reason);
+    return;
+  }
+
+  manual_navigation_path_ = path;
+  mission_mode_ = MissionMode::NAVIGATION;
+  manual_goal_reached_ = false;
+  manual_goal_arrival_pending_ = false;
+  hold_position_set_ = false;
+  PublishMissionState("NAVIGATION");
+  PublishManualNavigationOutputs(manual_navigation_path_);
+  ROS_WARN_STREAM("RViz goal accepted at [" << manual_goal_.x << ", " << manual_goal_.y << ", "
+                                             << manual_goal_.z << "]; exploration control is preempted");
+}
+
+void SensorCoveragePlanner3D::FixedStartGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& goal_msg)
+{
+  std_msgs::String status;
+  const auto reject = [&](const std::string& reason) {
+    status.data = "REJECTED: " + reason;
+    fixed_start_status_pub_.publish(status);
+    ROS_ERROR_STREAM("Fixed-start path request rejected: " << reason);
+  };
+
+  if (!pp_.kEnableFixedStartPlanning)
+  {
+    reject("fixed-start planning is disabled");
+    return;
+  }
+  if (!initialized_ || !pd_.initial_position_set_)
+  {
+    reject("the exploration start pose is not available yet");
+    return;
+  }
+  if (!goal_msg->header.frame_id.empty() && goal_msg->header.frame_id != kWorldFrameID)
+  {
+    reject("goal frame is '" + goal_msg->header.frame_id + "', expected '" + kWorldFrameID + "'");
+    return;
+  }
+  if (!std::isfinite(goal_msg->pose.position.x) || !std::isfinite(goal_msg->pose.position.y))
+  {
+    reject("goal coordinates are not finite");
+    return;
+  }
+
+  geometry_msgs::Point start;
+  start.x = pd_.initial_position_.x();
+  start.y = pd_.initial_position_.y();
+  start.z = GetFixedFlightHeightOr(pd_.initial_position_.z());
+  geometry_msgs::Point goal = goal_msg->pose.position;
+  goal.z = GetFixedFlightHeightOr(start.z);
+  if (!ManualGoalHasClearance(goal))
+  {
+    reject("obstacle points are within " + std::to_string(pp_.kManualGoalClearance) + " m of the goal");
+    return;
+  }
+
+  nav_msgs::Path path;
+  std::string failure_reason;
+  if (!BuildGraphNavigationPath(start, goal, path, failure_reason))
+  {
+    reject(failure_reason);
+    return;
+  }
+
+  fixed_start_path_pub_.publish(path);
+  geometry_msgs::PointStamped accepted_goal;
+  accepted_goal.header = path.header;
+  accepted_goal.point = goal;
+  fixed_start_goal_pub_.publish(accepted_goal);
+  pd_.planning_env_->PublishPlannerCloud();
+  status.data = "READY: fixed-start path contains " + std::to_string(path.poses.size()) + " poses";
+  fixed_start_status_pub_.publish(status);
+  ROS_WARN_STREAM("Fixed-start path generated from exploration start [" << start.x << ", " << start.y
+                                                                          << "] to [" << goal.x << ", "
+                                                                          << goal.y << "] at z=" << goal.z
+                                                                          << "; flight control was not changed");
+}
+
+void SensorCoveragePlanner3D::PauseMissionCallback(const std_msgs::Bool::ConstPtr& pause_msg)
+{
+  if (!pause_msg->data)
+  {
+    return;
+  }
+  mission_mode_ = MissionMode::HOLD;
+  manual_goal_reached_ = false;
+  manual_goal_arrival_pending_ = false;
+  LatchHoldPosition();
+  PublishHoldCommand("HOLD");
+  ROS_WARN("TARE mission paused; publishing the current position as the hold target");
+}
+
+void SensorCoveragePlanner3D::ResumeExplorationCallback(const std_msgs::Bool::ConstPtr& resume_msg)
+{
+  if (!resume_msg->data)
+  {
+    return;
+  }
+  if (exploration_finished_)
+  {
+    mission_mode_ = MissionMode::HOLD;
+    LatchHoldPosition();
+    PublishHoldCommand("exploration is already complete");
+    ROS_WARN("Exploration is already complete; restart TARE to begin a new exploration map");
+    return;
+  }
+  mission_mode_ = MissionMode::EXPLORATION;
+  manual_goal_reached_ = false;
+  manual_goal_arrival_pending_ = false;
+  hold_position_set_ = false;
+  keypose_cloud_update_ = true;
+  PublishMissionState("EXPLORATION");
+  ROS_WARN("TARE exploration control resumed");
+}
+
+void SensorCoveragePlanner3D::CancelNavigationCallback(const std_msgs::Bool::ConstPtr& cancel_msg)
+{
+  if (!cancel_msg->data)
+  {
+    return;
+  }
+  mission_mode_ = MissionMode::HOLD;
+  manual_goal_reached_ = false;
+  manual_goal_arrival_pending_ = false;
+  LatchHoldPosition();
+  PublishHoldCommand("navigation cancelled");
+  ROS_WARN("RViz goal navigation cancelled; holding current position");
+}
+
+bool SensorCoveragePlanner3D::ManualGoalHasClearance(const geometry_msgs::Point& goal) const
+{
+  // 纯函数实现见 mission/mission_path_utils.cpp
+  return mission_ns::GoalHasClearance(pp_, goal, pd_.collision_cloud_->cloud_,
+                                      pd_.registered_cloud_->cloud_);
+}
+
+bool SensorCoveragePlanner3D::BuildGraphNavigationPath(const geometry_msgs::Point& start,
+                                                       const geometry_msgs::Point& goal,
+                                                       nav_msgs::Path& path,
+                                                       std::string& failure_reason)
+{
+  // 实现见 mission/mission_path_utils.cpp（吸附到连通图 -> 检查末段净空 -> 图最短路 -> 统一高度）
+  return mission_ns::BuildGraphNavigationPath(pp_, pd_.initial_position_.z(), kWorldFrameID,
+                                              pd_.keypose_graph_.get(), pd_.collision_cloud_->cloud_,
+                                              pd_.registered_cloud_->cloud_, start, goal, path,
+                                              failure_reason);
+}
+
+bool SensorCoveragePlanner3D::BuildManualNavigationPath(nav_msgs::Path& path, std::string& failure_reason)
+{
+  return BuildGraphNavigationPath(pd_.robot_position_, manual_goal_, path, failure_reason);
+}
+
+void SensorCoveragePlanner3D::PublishManualNavigationOutputs(const nav_msgs::Path& path)
+{
+  pd_.planning_env_->PublishPlannerCloud();
+  nav_msgs::Path stamped_path = path;
+  stamped_path.header.frame_id = kWorldFrameID;
+  stamped_path.header.stamp = ros::Time::now();
+  for (auto& pose : stamped_path.poses)
+  {
+    pose.header = stamped_path.header;
+  }
+  manual_navigation_path_ = stamped_path;
+  manual_navigation_path_pub_.publish(stamped_path);
+  exploration_path_publisher_.publish(stamped_path);
+
+  geometry_msgs::PointStamped goal;
+  goal.header = stamped_path.header;
+  goal.point = manual_goal_;
+  manual_navigation_goal_pub_.publish(goal);
+  waypoint_pub_.publish(goal);
+
+  std_msgs::Bool active;
+  active.data = mission_mode_ == MissionMode::NAVIGATION;
+  navigation_active_pub_.publish(active);
+  std_msgs::Bool reached;
+  reached.data = manual_goal_reached_;
+  navigation_reached_pub_.publish(reached);
+}
+
+void SensorCoveragePlanner3D::PublishMissionState(const std::string& status)
+{
+  if (mission_status_ != status)
+  {
+    mission_status_ = status;
+    std_msgs::String status_message;
+    status_message.data = status;
+    mission_mode_pub_.publish(status_message);
+  }
+
+  std_msgs::Bool active;
+  active.data = mission_mode_ == MissionMode::NAVIGATION;
+  navigation_active_pub_.publish(active);
+  std_msgs::Bool reached;
+  reached.data = manual_goal_reached_;
+  navigation_reached_pub_.publish(reached);
+}
+
+void SensorCoveragePlanner3D::LatchHoldPosition()
+{
+  if (!initialized_)
+  {
+    hold_position_set_ = false;
+    return;
+  }
+  hold_position_ = pd_.robot_position_;
+  hold_position_.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
+  hold_position_set_ = true;
+}
+
+void SensorCoveragePlanner3D::PublishHoldCommand(const std::string& reason)
+{
+  pd_.planning_env_->PublishPlannerCloud();
+  if (mission_mode_ == MissionMode::HOLD && !hold_position_set_)
+  {
+    LatchHoldPosition();
+  }
+  nav_msgs::Path hold_path;
+  hold_path.header.frame_id = kWorldFrameID;
+  hold_path.header.stamp = ros::Time::now();
+  geometry_msgs::PoseStamped hold_pose;
+  hold_pose.header = hold_path.header;
+  hold_pose.pose.position =
+      mission_mode_ == MissionMode::HOLD && hold_position_set_ ? hold_position_ : pd_.robot_position_;
+  hold_pose.pose.position.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
+  hold_pose.pose.orientation.w = 1.0;
+  hold_path.poses.push_back(hold_pose);
+  exploration_path_publisher_.publish(hold_path);
+  manual_navigation_path_pub_.publish(hold_path);
+
+  geometry_msgs::PointStamped hold_waypoint;
+  hold_waypoint.header = hold_path.header;
+  hold_waypoint.point = hold_pose.pose.position;
+  waypoint_pub_.publish(hold_waypoint);
+  manual_navigation_goal_pub_.publish(hold_waypoint);
+  PublishMissionState(mission_mode_ == MissionMode::NAVIGATION ? "NAVIGATION" : "HOLD");
+  ROS_DEBUG_THROTTLE(5.0, "Holding UAV position: %s", reason.c_str());
+}
+
+void SensorCoveragePlanner3D::ExecuteManualNavigation()
+{
+  if (!initialized_)
+  {
+    PublishHoldCommand("waiting for state estimation");
+    return;
+  }
+
+  const double distance_to_goal =
+      std::hypot(pd_.robot_position_.x - manual_goal_.x, pd_.robot_position_.y - manual_goal_.y);
+  if (distance_to_goal <= pp_.kManualGoalArrivalRadius)
+  {
+    if (!manual_goal_arrival_pending_)
+    {
+      manual_goal_arrival_pending_ = true;
+      manual_goal_arrival_time_ = ros::Time::now();
+    }
+    if (!manual_goal_reached_ &&
+        (ros::Time::now() - manual_goal_arrival_time_).toSec() >= pp_.kManualGoalStableSeconds)
+    {
+      manual_goal_reached_ = true;
+      PublishMissionState("NAVIGATION");
+      ROS_WARN_STREAM("RViz navigation goal reached and stable for " << pp_.kManualGoalStableSeconds
+                                                                     << " s; holding at the goal");
+    }
+  }
+  else
+  {
+    manual_goal_arrival_pending_ = false;
+    manual_goal_reached_ = false;
+  }
+
+  if (manual_goal_reached_)
+  {
+    PublishManualNavigationOutputs(manual_navigation_path_);
+    return;
+  }
+
+  nav_msgs::Path replanned_path;
+  std::string failure_reason;
+  if (!BuildManualNavigationPath(replanned_path, failure_reason))
+  {
+    PublishHoldCommand("manual navigation graph path is unavailable");
+    ROS_ERROR_THROTTLE(5.0, "Manual navigation is holding: %s", failure_reason.c_str());
+    return;
+  }
+
+  PublishMissionState("NAVIGATION");
+  PublishManualNavigationOutputs(replanned_path);
+}
+
+double SensorCoveragePlanner3D::GetFixedFlightHeightOr(double fallback_z) const
+{
+  // 纯函数实现见 mission/mission_path_utils.cpp
+  return mission_ns::FixedFlightHeight(pp_, fallback_z, pd_.initial_position_.z());
 }
 
 void SensorCoveragePlanner3D::SendInitialWaypoint()
@@ -458,7 +867,7 @@ void SensorCoveragePlanner3D::SendInitialWaypoint()
   waypoint.header.stamp = ros::Time::now();
   waypoint.point.x = pd_.robot_position_.x + dx;
   waypoint.point.y = pd_.robot_position_.y + dy;
-  waypoint.point.z = pd_.robot_position_.z;
+  waypoint.point.z = GetFixedFlightHeightOr(pd_.robot_position_.z);
   waypoint_pub_.publish(waypoint);
 }
 
@@ -713,7 +1122,7 @@ void SensorCoveragePlanner3D::PublishGlobalPlanningVisualization(
   nav_msgs::Path full_path = pd_.exploration_path_.GetPath();
   full_path.header.frame_id = "map";
   full_path.header.stamp = ros::Time::now();
-  // exploration_path_publisher_.publish(full_path);
+  exploration_path_publisher_.publish(full_path);
   pd_.exploration_path_.GetVisualizationCloud(pd_.exploration_path_cloud_->cloud_);
   pd_.exploration_path_cloud_->Publish();
   // pd_.planning_env_->PublishStackedCloud();
@@ -1156,7 +1565,7 @@ void SensorCoveragePlanner3D::PublishWaypoint()
   {
     waypoint.point.x = pd_.initial_position_.x();
     waypoint.point.y = pd_.initial_position_.y();
-    waypoint.point.z = pd_.initial_position_.z();
+    waypoint.point.z = GetFixedFlightHeightOr(pd_.initial_position_.z());
   }
   else
   {
@@ -1165,14 +1574,14 @@ void SensorCoveragePlanner3D::PublishWaypoint()
     double r = sqrt(dx * dx + dy * dy);
     double extend_dist =
         lookahead_point_in_line_of_sight_ ? pp_.kExtendWayPointDistanceBig : pp_.kExtendWayPointDistanceSmall;
-    if (r < extend_dist && pp_.kExtendWayPoint)
+    if (r > 1e-3 && r < extend_dist && pp_.kExtendWayPoint)
     {
       dx = dx / r * extend_dist;
       dy = dy / r * extend_dist;
     }
     waypoint.point.x = dx + pd_.robot_position_.x;
     waypoint.point.y = dy + pd_.robot_position_.y;
-    waypoint.point.z = pd_.lookahead_point_.z();
+    waypoint.point.z = GetFixedFlightHeightOr(pd_.lookahead_point_.z());
   }
   misc_utils_ns::Publish<geometry_msgs::PointStamped>(waypoint_pub_, waypoint, kWorldFrameID);
 }
@@ -1210,7 +1619,13 @@ void SensorCoveragePlanner3D::PublishRuntime()
 double SensorCoveragePlanner3D::GetRobotToHomeDistance()
 {
   Eigen::Vector3d robot_position(pd_.robot_position_.x, pd_.robot_position_.y, pd_.robot_position_.z);
-  return (robot_position - pd_.initial_position_).norm();
+  Eigen::Vector3d home_position = pd_.initial_position_;
+  if (pp_.kUseFixedFlightHeight)
+  {
+    robot_position.z() = 0.0;
+    home_position.z() = 0.0;
+  }
+  return (robot_position - home_position).norm();
 }
 
 void SensorCoveragePlanner3D::PublishExplorationState()
@@ -1273,9 +1688,31 @@ void SensorCoveragePlanner3D::CountDirectionChange()
 
 void SensorCoveragePlanner3D::execute(const ros::TimerEvent&)
 {
+  if (mission_mode_ == MissionMode::NAVIGATION)
+  {
+    ExecuteManualNavigation();
+    return;
+  }
+  if (mission_mode_ == MissionMode::HOLD)
+  {
+    if (initialized_)
+    {
+      PublishHoldCommand("mission paused");
+    }
+    else
+    {
+      PublishMissionState("HOLD");
+    }
+    return;
+  }
   if (!pp_.kAutoStart && !start_exploration_)
   {
-    ROS_INFO("Waiting for start signal");
+    ROS_INFO_THROTTLE(5.0, "Waiting for stabilized UAV start signal");
+    return;
+  }
+  if (!pp_.kAutoStart && (ros::Time::now() - start_time_).toSec() < pp_.kExplorationWarmupSeconds)
+  {
+    ROS_INFO_THROTTLE(1.0, "Collecting stabilized scans before first exploration plan");
     return;
   }
   Timer overall_processing_timer("overall processing");
@@ -1343,20 +1780,44 @@ void SensorCoveragePlanner3D::execute(const ros::TimerEvent&)
     near_home_ = GetRobotToHomeDistance() < pp_.kRushHomeDist;
     at_home_ = GetRobotToHomeDistance() < pp_.kAtHomeDistThreshold;
 
-    if (pd_.grid_world_->IsReturningHome() && pd_.local_coverage_planner_->IsLocalCoverageComplete() &&
-        (ros::Time::now() - start_time_).toSec() > 5)
+    const ros::Time now = ros::Time::now();
+    const bool completion_candidate =
+        pd_.grid_world_->IsReturningHome() && pd_.local_coverage_planner_->IsLocalCoverageComplete() &&
+        (now - start_time_).toSec() > 5;
+    if (completion_candidate)
     {
-      if (!exploration_finished_)
+      if (!exploration_completion_pending_)
+      {
+        exploration_completion_pending_ = true;
+        exploration_completion_candidate_time_ = now;
+        ROS_WARN_STREAM("No reachable exploring cell; confirming for "
+                        << pp_.kExplorationCompletionConfirmSeconds << " s before return-home latch"
+                        << " (uncovered=" << uncovered_point_num << ", frontiers=" << uncovered_frontier_point_num
+                        << ", exploring_cells="
+                        << pd_.grid_world_->GetCellStatusCount(grid_world_ns::CellStatus::EXPLORING) << ")");
+      }
+      if (!exploration_finished_ &&
+          (now - exploration_completion_candidate_time_).toSec() >= pp_.kExplorationCompletionConfirmSeconds)
       {
         PrintExplorationStatus("Exploration completed, returning home", false);
+        exploration_finished_ = true;
+        PublishMissionState("EXPLORATION");
       }
-      exploration_finished_ = true;
+    }
+    else if (exploration_completion_pending_ && !exploration_finished_)
+    {
+      exploration_completion_pending_ = false;
+      ROS_INFO_STREAM("Exploration completion candidate cleared; continuing mission"
+                      << " (uncovered=" << uncovered_point_num << ", frontiers=" << uncovered_frontier_point_num
+                      << ", exploring_cells="
+                      << pd_.grid_world_->GetCellStatusCount(grid_world_ns::CellStatus::EXPLORING) << ")");
     }
 
     if (exploration_finished_ && at_home_ && !stopped_)
     {
       PrintExplorationStatus("Return home completed", false);
       stopped_ = true;
+      PublishMissionState("EXPLORATION");
     }
 
     pd_.exploration_path_ = ConcatenateGlobalLocalPath(global_path, local_path);

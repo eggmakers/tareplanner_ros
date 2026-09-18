@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      TARE 探索节点 + 任务层。
+
+      参数来源（优先级从低到高）:
+        1. config/uav/tare_core.yaml     算法参数
+        2. config/uav/tare_topics.yaml   话题接线
+        3. config/uav/tare_mission.yaml  任务/定高/手动导航
+        4. 本文件里的 <param>            接线与命令行覆盖
+
+      带 if="$(eval ...)" 的 <param> 只在对应 arg 非空时生效，
+      所以命令行不传参数时完全由 YAML 决定。
+    -->
+
+    <!-- 接线（必须拿到真实值，与 _input_bridge.launch 的 relay 目标一致）-->
+    <arg name="tare_odom_topic" default="/state_estimation"/>
+    <arg name="tare_cloud_topic" default="/registered_scan"/>
+    <arg name="waypoint_topic" default="/way_point"/>
+    <arg name="fixed_start_goal_topic" default="/tare_uav/fixed_start_goal"/>
+
+    <!-- 命令行覆盖层（空 = 用 YAML）-->
+    <arg name="tare_sensor_range" default=""/>
+    <arg name="fixed_flight_height" default=""/>
+    <arg name="fixed_flight_height_relative_to_start" default=""/>
+    <arg name="uav_horizontal_clearance" default=""/>
+    <arg name="uav_vertical_clearance" default=""/>
+    <arg name="manual_goal_topic" default=""/>
+    <arg name="enable_manual_goal_navigation" default=""/>
+    <arg name="manual_goal_arrival_radius" default=""/>
+    <arg name="manual_goal_max_graph_distance" default=""/>
+    <arg name="exploration_completion_confirm_seconds" default=""/>
+
+    <node pkg="tare_planner" type="tare_planner_node" name="tare_planner_node"
+          output="screen" ns="sensor_coverage_planner">
+
+        <rosparam command="load" file="$(find tare_planner)/config/uav/tare_core.yaml"/>
+        <rosparam command="load" file="$(find tare_planner)/config/uav/tare_topics.yaml"/>
+        <rosparam command="load" file="$(find tare_planner)/config/uav/tare_mission.yaml"/>
+
+        <!-- 接线覆盖（始终生效）-->
+        <param name="sub_state_estimation_topic_" value="$(arg tare_odom_topic)"/>
+        <param name="sub_registered_scan_topic_" value="$(arg tare_cloud_topic)"/>
+        <param name="pub_waypoint_topic_" value="$(arg waypoint_topic)"/>
+        <param name="sub_fixed_start_goal_topic_" value="$(arg fixed_start_goal_topic)"/>
+
+        <!-- 命令行覆盖（仅当 arg 非空）-->
+        <param name="sub_manual_goal_topic_" value="$(arg manual_goal_topic)"
+               if="$(eval arg('manual_goal_topic') != '')"/>
+        <param name="kExplorationCompletionConfirmSeconds" type="double"
+               value="$(arg exploration_completion_confirm_seconds)"
+               if="$(eval arg('exploration_completion_confirm_seconds') != '')"/>
+
+        <param name="kSensorRange" type="double" value="$(arg tare_sensor_range)"
+               if="$(eval arg('tare_sensor_range') != '')"/>
+        <param name="kFixedFlightHeight" type="double" value="$(arg fixed_flight_height)"
+               if="$(eval arg('fixed_flight_height') != '')"/>
+        <param name="kFixedFlightHeightRelativeToStart" type="bool"
+               value="$(arg fixed_flight_height_relative_to_start)"
+               if="$(eval arg('fixed_flight_height_relative_to_start') != '')"/>
+
+        <!-- 手动目标导航：clearance 复用 UAV 的水平/垂直安全间距，保持单一旋钮 -->
+        <param name="kEnableManualGoalNavigation" type="bool"
+               value="$(arg enable_manual_goal_navigation)"
+               if="$(eval arg('enable_manual_goal_navigation') != '')"/>
+        <param name="kManualGoalArrivalRadius" type="double" value="$(arg manual_goal_arrival_radius)"
+               if="$(eval arg('manual_goal_arrival_radius') != '')"/>
+        <param name="kManualGoalMaxGraphDistance" type="double"
+               value="$(arg manual_goal_max_graph_distance)"
+               if="$(eval arg('manual_goal_max_graph_distance') != '')"/>
+        <param name="kManualGoalClearance" type="double" value="$(arg uav_horizontal_clearance)"
+               if="$(eval arg('uav_horizontal_clearance') != '')"/>
+        <param name="kManualGoalVerticalClearance" type="double" value="$(arg uav_vertical_clearance)"
+               if="$(eval arg('uav_vertical_clearance') != '')"/>
+    </node>
+</launch>

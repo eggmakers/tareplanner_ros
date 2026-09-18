@@ -301,6 +301,7 @@ public:
     return pointcloud_manager_->GetNeighborCellsOrigin();
   }
   void GetVisualizationPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr vis_cloud);
+  void PublishPlannerCloud();
   void PublishStackedCloud();
   void PublishUncoveredCloud();
   void PublishUncoveredFrontierCloud();

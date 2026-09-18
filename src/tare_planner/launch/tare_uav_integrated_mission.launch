@@ -1,0 +1,157 @@
+<launch>
+    <!-- ============ 整合任务入口（第二入口）============
+
+         在主入口 tare_uav_fixed_height.launch 之上，额外接入：
+           mission mux / route exporter / route replayer / bundle validator /
+           saved-map A*，并把 TARE 的输出改指 mux 的 source 话题。
+
+         P2' 重构原则：本文件只留两类东西
+           1) 接线（谁连谁）—— 话题改指、mux 的 source / command 命名
+           2) 与主入口默认值【确实不同】的少量覆盖
+         其余参数不再在本文件写默认值：不传 ⇒ 主入口用它自己的默认
+         （最终来自 config/uav/*.yaml）。
+
+         改参数请优先改 config/uav/*.yaml；只有下面「真差异」那 5 个值
+         是本入口有意与默认不同的，改它们才需要动本文件。
+    -->
+
+    <!-- ======== 1. 真差异：本入口有意覆盖主入口默认值 ======== -->
+    <!-- max_z_* 与 takeoff_stabilization_seconds 在本入口用另一套更保守的值
+         （YAML 默认 max_z_speed=0.35 / accel=0.25 / jerk=0.5 / takeoff=3.0） -->
+    <arg name="max_z_speed" default="0.20"/>
+    <arg name="max_z_accel" default="0.15"/>
+    <arg name="max_z_jerk" default="0.30"/>
+    <arg name="takeoff_stabilization_seconds" default="5.0"/>
+    <arg name="navigation_boundary_file" default="/data/tunnel_boundary.ply"/>
+
+    <!-- ======== 2. 本入口自有节点也要消费的共享值 ========
+         这些值同时被 exporter / replayer / saved-map 以 type="double" 解析，
+         传 "" 会让 roslaunch 解析失败，因此必须显式声明。
+         已核对：与 config/uav/*.yaml 一致。 -->
+    <arg name="map_frame" default="map"/>
+    <arg name="fixed_flight_height" default="1.5"/>
+    <arg name="fixed_flight_height_relative_to_start" default="false"/>
+    <arg name="local_path_lookahead" default="1.5"/>
+    <arg name="uav_horizontal_clearance" default="0.75"/>
+    <arg name="uav_vertical_clearance" default="0.35"/>
+    <arg name="vehicle_length" default="0.45298"/>
+    <arg name="vehicle_width" default="0.45298"/>
+    <arg name="vehicle_height" default="0.17139"/>
+    <arg name="vehicle_mass" default="3.0"/>
+
+    <!-- ======== 3. 本入口独有的开关与参数 ======== -->
+    <arg name="default_mission_mode" default="tare"/>
+    <arg name="run_path_exporter" default="true"/>
+    <arg name="run_path_replayer" default="true"/>
+    <arg name="run_bundle_validator" default="false"/>
+    <arg name="run_saved_map_planner" default="false"/>
+
+    <!-- Route/map handoff. map_file 可以是 Fast-LIO 输出的 PCD。 -->
+    <arg name="bundle_dir" default="$(env HOME)/tare_uav_handoff"/>
+    <arg name="route_file" default="$(arg bundle_dir)/uav_route.json"/>
+    <arg name="map_file" default=""/>
+    <arg name="copy_map_to_bundle" default="true"/>
+    <arg name="saved_map_resolution" default="0.20"/>
+    <arg name="saved_map_path_spacing" default="0.30"/>
+    <arg name="saved_map_goal_snap_radius" default="1.0"/>
+    <arg name="saved_map_use_explicit_start" default="false"/>
+    <arg name="saved_map_offset_x" default="0.0"/>
+    <arg name="saved_map_offset_y" default="0.0"/>
+    <arg name="saved_map_offset_z" default="0.0"/>
+    <arg name="saved_map_offset_yaw" default="0.0"/>
+
+    <!-- ======== 4. 主入口：只改接线 + 传真差异 ======== -->
+    <include file="$(find tare_planner)/launch/tare_uav_fixed_height.launch">
+        <!-- 接线：TARE 输出改指 mux 的 source，局部规划器输入改指 mux 的 command。
+             这 5 个是"谁连谁"，必须显式。 -->
+        <arg name="waypoint_topic" value="/tare_uav/source/tare/waypoint"/>
+        <arg name="manual_goal_topic" value="/tare_uav/source/tare/goal"/>
+        <arg name="fixed_start_goal_topic" value="/tare_uav/source/fixed_start/goal"/>
+        <arg name="local_planner_waypoint_topic" value="/tare_uav/command/waypoint"/>
+        <arg name="local_planner_reference_path_topic"
+             value="/tare_uav/command/reference_path"/>
+
+        <!-- 只传与主入口默认值不同的项 -->
+        <arg name="max_z_speed" value="$(arg max_z_speed)"/>
+        <arg name="max_z_accel" value="$(arg max_z_accel)"/>
+        <arg name="max_z_jerk" value="$(arg max_z_jerk)"/>
+        <arg name="takeoff_stabilization_seconds" value="$(arg takeoff_stabilization_seconds)"/>
+        <arg name="navigation_boundary_file" value="$(arg navigation_boundary_file)"/>
+    </include>
+
+    <node pkg="tare_planner" type="uav_mission_mux.py" name="uav_mission_mux"
+          output="screen" required="true">
+        <param name="frame_id" value="$(arg map_frame)"/>
+        <param name="default_mode" value="$(arg default_mission_mode)"/>
+        <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+        <param name="fixed_flight_height_relative_to_start" type="bool"
+               value="$(arg fixed_flight_height_relative_to_start)"/>
+        <param name="odometry_topic" value="/state_estimation"/>
+    </node>
+
+    <group if="$(arg run_path_exporter)">
+        <node pkg="tare_planner" type="uav_path_exporter.py" name="uav_path_exporter"
+              output="screen">
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="route_file" value="$(arg route_file)"/>
+            <param name="map_file" value="$(arg map_file)"/>
+            <param name="copy_map" type="bool" value="$(arg copy_map_to_bundle)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="vehicle_length" type="double" value="$(arg vehicle_length)"/>
+            <param name="vehicle_width" type="double" value="$(arg vehicle_width)"/>
+            <param name="vehicle_height" type="double" value="$(arg vehicle_height)"/>
+            <param name="vehicle_mass" type="double" value="$(arg vehicle_mass)"/>
+            <param name="horizontal_clearance" type="double" value="$(arg uav_horizontal_clearance)"/>
+            <param name="vertical_clearance" type="double" value="$(arg uav_vertical_clearance)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_path_replayer)">
+        <node pkg="tare_planner" type="uav_path_replayer.py" name="uav_path_replayer"
+              output="screen">
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="route_file" value="$(arg route_file)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="lookahead_distance" type="double" value="$(arg local_path_lookahead)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_bundle_validator)">
+        <node pkg="tare_planner" type="uav_bundle_validator.py" name="uav_bundle_validator"
+              output="screen" required="true">
+            <param name="bundle_dir" value="$(arg bundle_dir)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="require_map" type="bool" value="$(arg run_saved_map_planner)"/>
+        </node>
+    </group>
+
+    <group if="$(arg run_saved_map_planner)">
+        <node pkg="tare_planner" type="uav_saved_map_planner_node"
+              name="uav_saved_map_planner" output="screen" required="true">
+            <param name="map_file" value="$(arg map_file)"/>
+            <param name="frame_id" value="$(arg map_frame)"/>
+            <param name="fixed_flight_height" type="double" value="$(arg fixed_flight_height)"/>
+            <param name="fixed_flight_height_relative_to_start" type="bool"
+                   value="$(arg fixed_flight_height_relative_to_start)"/>
+            <param name="resolution" type="double" value="$(arg saved_map_resolution)"/>
+            <param name="path_spacing" type="double" value="$(arg saved_map_path_spacing)"/>
+            <param name="goal_snap_radius" type="double" value="$(arg saved_map_goal_snap_radius)"/>
+            <param name="use_explicit_start" type="bool" value="$(arg saved_map_use_explicit_start)"/>
+            <param name="horizontal_clearance" type="double" value="$(arg uav_horizontal_clearance)"/>
+            <param name="vertical_clearance" type="double" value="$(arg uav_vertical_clearance)"/>
+            <param name="vehicle_height" type="double" value="$(arg vehicle_height)"/>
+            <param name="map_offset_x" type="double" value="$(arg saved_map_offset_x)"/>
+            <param name="map_offset_y" type="double" value="$(arg saved_map_offset_y)"/>
+            <param name="map_offset_z" type="double" value="$(arg saved_map_offset_z)"/>
+            <param name="map_offset_yaw" type="double" value="$(arg saved_map_offset_yaw)"/>
+        </node>
+    </group>
+</launch>

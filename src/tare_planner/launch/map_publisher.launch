@@ -1,0 +1,18 @@
+<launch>
+    <!-- 发布一份离线 PCD 点云到 /map_cloud, 供 uav_saved_map_planner_node 使用。
+         默认路径按包内 data/ 目录解析, 也可用 TARE_MAP_PCD 环境变量或命令行覆盖:
+             roslaunch tare_planner map_publisher.launch pcd_path:=/abs/path/to/map.pcd -->
+    <arg name="pcd_path" default="$(optenv TARE_MAP_PCD $(find tare_planner)/data/saved_map.pcd)" />
+
+    <node pkg="pcl_ros" type="pcd_to_pointcloud" name="pcd_to_pointcloud" output="screen">
+        <param name="file_name" value="$(arg pcd_path)" />
+        
+        <param name="frame_id" value="map" />
+        
+        <param name="latch" value="true" />
+        
+        <remap from="cloud_pcd" to="/map_cloud" />
+    </node>
+
+  
+</launch>

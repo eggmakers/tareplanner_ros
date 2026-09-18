@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      规划边界发布器（可选）: 把离线边界点云发给 TARE 当作可探索范围限制。
+      默认关闭（run_navigation_boundary:=false）。
+    -->
+
+    <!-- 原默认值 /data/tunnel_boundary.ply 是机器相关的绝对路径，本机不存在，
+         改为按包内 data/ 目录解析。 -->
+    <arg name="navigation_boundary_file" default="$(find tare_planner)/data/boundary.ply"/>
+
+    <node pkg="tare_planner" type="navigationBoundary" name="uav_navigation_boundary"
+          output="screen" required="true">
+        <param name="boundary_file_dir" value="$(arg navigation_boundary_file)"/>
+        <param name="sendBoundary" type="bool" value="true"/>
+        <param name="sendBoundaryInterval" type="int" value="2"/>
+    </node>
+</launch>

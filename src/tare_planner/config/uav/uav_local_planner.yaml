@@ -1,0 +1,61 @@
+# UAV 局部规划器（uav_local_planner_node）—— 唯一真源
+#
+# 职责: 接收 TARE 的 /way_point，做局部避障与候选方向选择，
+#       输出安全航点 /tare_uav/safe_waypoint + 可视化路径。
+# 加载位置: launch/include/_uav_local_planner.launch
+#
+# 注意: planning_frame 由 launch 的 map_frame arg 统一给出，不在此文件中。
+
+# ---- 话题 ----
+odometry_topic: /state_estimation
+raw_waypoint_topic: /way_point
+reference_path_topic: /sensor_coverage_planner/exploration_path
+collision_cloud_topic: /sensor_coverage_planner/collision_cloud
+registered_scan_topic: /registered_scan
+safe_waypoint_topic: /tare_uav/safe_waypoint
+safe_path_topic: /path
+free_paths_topic: /free_paths
+local_obstacles_topic: /added_obstacles
+trajectory_topic: /trajectory
+
+# ---- 运行节奏 ----
+planner_rate: 10.0
+lookahead_distance: 1.5
+
+# ---- 安全间距（从无人机中心量起）----
+horizontal_clearance: 0.75
+vertical_clearance: 0.35
+
+# ---- 局部点云处理 ----
+obstacle_range: 6.0
+cloud_voxel_size: 0.10
+
+# ---- 候选方向 ----
+candidate_angle_step_degrees: 15.0
+candidate_angle_count: 6
+collision_point_threshold: 2
+
+# ---- 动态反应/刹车距离（叠加在 clearance 之上）----
+reaction_time: 0.20
+max_deceleration: 0.20
+
+# ---- 输入超时（秒）----
+odometry_timeout: 0.50
+waypoint_timeout: 3.0
+path_timeout: 3.0
+scan_timeout: 0.50
+collision_cloud_timeout: 3.0
+
+# ---- 输入有效性要求 ----
+require_reference_path: false
+require_registered_scan: true
+require_collision_cloud: false
+allow_identity_cloud_frame: false
+
+# ---- 机身尺寸（实测）----
+# 前后长度暂按与实测宽度相同处理（见 vehicle_length_assumed）。
+vehicle_length: 0.45298
+vehicle_width: 0.45298
+vehicle_height: 0.17139
+vehicle_mass: 3.0
+vehicle_length_assumed: true

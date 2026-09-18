@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      UAV 局部规划器: TARE 的 /way_point -> 避障后的 /tare_uav/safe_waypoint。
+
+      参数默认值在 config/uav/uav_local_planner.yaml，
+      这里只做「接线」和「命令行覆盖」。
+    -->
+
+    <!-- 接线（始终生效）-->
+    <arg name="map_frame" default="map"/>
+    <arg name="odometry_topic" default="/state_estimation"/>
+    <arg name="raw_waypoint_topic" default="/way_point"/>
+    <arg name="reference_path_topic" default="/sensor_coverage_planner/exploration_path"/>
+    <arg name="collision_cloud_topic" default="/sensor_coverage_planner/collision_cloud"/>
+    <arg name="registered_scan_topic" default="/registered_scan"/>
+    <arg name="safe_waypoint_topic" default="/tare_uav/safe_waypoint"/>
+    <arg name="safe_path_topic" default="/path"/>
+
+    <!-- 命令行覆盖层（空 = 用 YAML）-->
+    <arg name="lookahead_distance" default=""/>
+    <arg name="obstacle_range" default=""/>
+    <arg name="horizontal_clearance" default=""/>
+    <arg name="vertical_clearance" default=""/>
+    <arg name="reaction_time" default=""/>
+    <arg name="max_deceleration" default=""/>
+    <arg name="candidate_angle_step_degrees" default=""/>
+    <arg name="candidate_angle_count" default=""/>
+    <arg name="vehicle_length" default=""/>
+    <arg name="vehicle_width" default=""/>
+    <arg name="vehicle_height" default=""/>
+    <arg name="vehicle_mass" default=""/>
+
+    <node pkg="tare_planner" type="uav_local_planner_node" name="uav_local_planner"
+          output="screen" required="true">
+
+        <rosparam command="load" file="$(find tare_planner)/config/uav/uav_local_planner.yaml"/>
+
+        <!-- 接线覆盖（始终生效）-->
+        <param name="planning_frame" value="$(arg map_frame)"/>
+        <param name="odometry_topic" value="$(arg odometry_topic)"/>
+        <param name="raw_waypoint_topic" value="$(arg raw_waypoint_topic)"/>
+        <param name="reference_path_topic" value="$(arg reference_path_topic)"/>
+        <param name="collision_cloud_topic" value="$(arg collision_cloud_topic)"/>
+        <param name="registered_scan_topic" value="$(arg registered_scan_topic)"/>
+        <param name="safe_waypoint_topic" value="$(arg safe_waypoint_topic)"/>
+        <param name="safe_path_topic" value="$(arg safe_path_topic)"/>
+
+        <!-- 命令行覆盖（仅当 arg 非空）-->
+        <param name="lookahead_distance" type="double" value="$(arg lookahead_distance)"
+               if="$(eval arg('lookahead_distance') != '')"/>
+        <param name="horizontal_clearance" type="double" value="$(arg horizontal_clearance)"
+               if="$(eval arg('horizontal_clearance') != '')"/>
+        <param name="vertical_clearance" type="double" value="$(arg vertical_clearance)"
+               if="$(eval arg('vertical_clearance') != '')"/>
+        <param name="reaction_time" type="double" value="$(arg reaction_time)"
+               if="$(eval arg('reaction_time') != '')"/>
+        <param name="max_deceleration" type="double" value="$(arg max_deceleration)"
+               if="$(eval arg('max_deceleration') != '')"/>
+        <param name="candidate_angle_step_degrees" type="double"
+               value="$(arg candidate_angle_step_degrees)"
+               if="$(eval arg('candidate_angle_step_degrees') != '')"/>
+        <param name="candidate_angle_count" type="int" value="$(arg candidate_angle_count)"
+               if="$(eval arg('candidate_angle_count') != '')"/>
+        <param name="obstacle_range" type="double" value="$(arg obstacle_range)"
+               if="$(eval arg('obstacle_range') != '')"/>
+        <param name="vehicle_length" type="double" value="$(arg vehicle_length)"
+               if="$(eval arg('vehicle_length') != '')"/>
+        <param name="vehicle_width" type="double" value="$(arg vehicle_width)"
+               if="$(eval arg('vehicle_width') != '')"/>
+        <param name="vehicle_height" type="double" value="$(arg vehicle_height)"
+               if="$(eval arg('vehicle_height') != '')"/>
+        <param name="vehicle_mass" type="double" value="$(arg vehicle_mass)"
+               if="$(eval arg('vehicle_mass') != '')"/>
+    </node>
+</launch>

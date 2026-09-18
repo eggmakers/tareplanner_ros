@@ -1,0 +1,276 @@
+<?xml version="1.0"?>
+<launch>
+    <!--
+      ============================================================================
+      固定高度 UAV TARE 入口（仅支持无人机）。
+
+      启动顺序:
+        1. 先起 roscore / 飞控仿真 / 里程计 / LiDAR 建图
+        2. 再 launch 本文件
+        3. 设定点开始流以后，把飞控切到 position/offboard
+
+      数据链:
+        external_odom_topic ─┐
+        external_cloud_topic ─┴─> [_input_bridge] ─> tare_odom/cloud_topic
+                                                       │
+                                            [tare_planner_node] ─> /way_point
+                                                       │
+                                        [_uav_local_planner] ─> /tare_uav/safe_waypoint
+                                                       │
+                                           [_pose_bridge] ─> uav_pose_topic
+
+      参数去哪里改（重要）:
+        ★ 所有默认值都在 config/uav/*.yaml，这是唯一真源。
+        本文件里的 <arg> 只是"命令行覆盖层"：
+          - 默认值为 "" 的 arg → 传了才生效，否则用 YAML 的值
+          - 有实际默认值的 arg → 属于"接线"或"运行开关"，不是调参
+
+      要改飞行参数请改 YAML:
+        config/uav/tare_core.yaml          TARE 算法参数
+        config/uav/tare_mission.yaml       探索/定高/手动导航
+        config/uav/tare_topics.yaml        话题接线
+        config/uav/uav_local_planner.yaml  局部避障
+        config/uav/uav_pose_bridge.yaml    设定点平滑/限幅/起飞/RC
+        config/uav/uav_offboard.yaml       OFFBOARD 管理
+
+      各组件实现见 launch/include/_*.launch
+      ============================================================================
+    -->
+
+    <!-- ======================== 1. 运行开关 ======================== -->
+    <arg name="run_tare_planner" default="true"/>
+    <arg name="run_input_bridge" default="true"/>
+    <arg name="run_static_tf_bridge" default="false"/>
+    <arg name="run_uav_local_planner" default="true"/>
+    <arg name="run_pose_bridge" default="true"/>
+    <arg name="run_offboard_manager" default="false"/>
+    <arg name="run_navigation_boundary" default="false"/>
+    <arg name="rviz" default="true"/>
+    <arg name="rviz_config" default="$(find tare_planner)/rviz/vehicle_simulator.rviz"/>
+    <arg name="rviz_path_compatibility" default="true"/>
+    <arg name="rosbag_record" default="false"/>
+    <arg name="bag_path" default="Desktop"/>
+    <arg name="bag_name_prefix" default="tare_uav_fixed_height"/>
+
+    <!-- ======================== 2. 接线（真实默认值）========================
+         这些是"谁连谁"，不是调参，所以保留在 launch 里。
+         话题名在 config/uav/tare_topics.yaml 也有同名键（节点读的那份）。
+         改话题名时两处一起改，以 YAML 为准。
+    -->
+    <arg name="map_frame" default="map"/>
+    <arg name="mavros_namespace" default="/mavros"/>
+    <arg name="external_odom_topic" default="/mavros/local_position/odom"/>
+    <arg name="external_cloud_topic" default="/cloud_registered"/>
+    <arg name="tare_odom_topic" default="/state_estimation"/>
+    <arg name="tare_cloud_topic" default="/registered_scan"/>
+    <arg name="waypoint_topic" default="/way_point"/>
+    <arg name="safe_waypoint_topic" default="/tare_uav/safe_waypoint"/>
+    <arg name="uav_pose_topic" default="/mavros/setpoint_position/local"/>
+    <arg name="rviz_path_topic" default="/path"/>
+    <arg name="tare_reference_path_topic" default="/sensor_coverage_planner/exploration_path"/>
+    <arg name="fixed_start_goal_topic" default="/tare_uav/fixed_start_goal"/>
+    <!-- 局部规划器的输入航点 / 参考路径，默认跟随 TARE 输出；
+         tare_uav_integrated_mission.launch 会把它们改指 mission mux。 -->
+    <arg name="local_planner_waypoint_topic" default="$(arg waypoint_topic)"/>
+    <arg name="local_planner_reference_path_topic" default="$(arg tare_reference_path_topic)"/>
+    <arg name="tare_collision_cloud_topic" default="/sensor_coverage_planner/collision_cloud"/>
+    <arg name="tare_global_path_topic" default="/sensor_coverage_planner/global_path"/>
+    <arg name="navigation_boundary_file" default="$(find tare_planner)/data/boundary.ply"/>
+
+    <!-- 静态 TF 桥（run_static_tf_bridge:=true 时才用）-->
+    <arg name="camera_init_frame" default="camera_init"/>
+    <arg name="body_frame" default="body"/>
+    <arg name="sensor_frame" default="sensor"/>
+    <arg name="vehicle_frame" default="vehicle"/>
+    <arg name="base_frame" default="base_footprint"/>
+    <arg name="map_to_camera_init_yaw" default="0.0"/>
+    <arg name="sensor_to_vehicle_yaw" default="0.0"/>
+
+    <!-- ======================== 3. 命令行覆盖层 ========================
+         默认值为 "" ⇒ 不传就用 YAML 的值。
+         默认值来自 config/uav/*.yaml，本文件不再重复写数字。
+    -->
+    <!-- TARE -->
+    <arg name="tare_sensor_range" default=""/>
+    <arg name="fixed_flight_height" default=""/>
+    <arg name="fixed_flight_height_relative_to_start" default=""/>
+    <arg name="uav_horizontal_clearance" default=""/>
+    <arg name="uav_vertical_clearance" default=""/>
+    <arg name="manual_goal_topic" default=""/>
+    <arg name="enable_manual_goal_navigation" default=""/>
+    <arg name="manual_goal_arrival_radius" default=""/>
+    <arg name="manual_goal_max_graph_distance" default=""/>
+    <arg name="exploration_completion_confirm_seconds" default=""/>
+
+    <!-- UAV 局部规划器 -->
+    <arg name="local_path_lookahead" default=""/>
+    <arg name="local_obstacle_range" default=""/>
+    <arg name="local_reaction_time" default=""/>
+    <arg name="local_max_deceleration" default=""/>
+    <arg name="local_candidate_angle_step_degrees" default=""/>
+    <arg name="local_candidate_angle_count" default=""/>
+    <arg name="vehicle_length" default=""/>
+    <arg name="vehicle_width" default=""/>
+    <arg name="vehicle_height" default=""/>
+    <arg name="vehicle_mass" default=""/>
+
+    <!-- 设定点限幅 -->
+    <arg name="max_xy_speed" default=""/>
+    <arg name="max_z_speed" default=""/>
+    <arg name="max_xy_accel" default=""/>
+    <arg name="max_z_accel" default=""/>
+    <arg name="max_xy_jerk" default=""/>
+    <arg name="max_z_jerk" default=""/>
+    <arg name="max_yaw_rate" default=""/>
+    <arg name="heading_alignment_enabled" default=""/>
+    <arg name="heading_alignment_tolerance" default=""/>
+
+    <!-- 起飞 / 模式 / 保护 -->
+    <arg name="takeoff_stabilization_seconds" default=""/>
+    <arg name="start_exploration_after_takeoff" default=""/>
+    <arg name="auto_arm" default=""/>
+    <arg name="offboard_mode" default=""/>
+    <arg name="rc_override_enabled" default=""/>
+    <arg name="rc_override_channel" default=""/>
+    <arg name="rc_override_pwm" default=""/>
+    <arg name="safety_geofence" default=""/>
+    <arg name="safety_geofence_file" default=""/>
+
+    <!-- ======================== 4. 可选组件 ======================== -->
+
+    <group if="$(arg run_input_bridge)">
+        <include file="$(find tare_planner)/launch/include/_input_bridge.launch">
+            <arg name="external_odom_topic" value="$(arg external_odom_topic)"/>
+            <arg name="external_cloud_topic" value="$(arg external_cloud_topic)"/>
+            <arg name="tare_odom_topic" value="$(arg tare_odom_topic)"/>
+            <arg name="tare_cloud_topic" value="$(arg tare_cloud_topic)"/>
+        </include>
+    </group>
+
+    <group if="$(arg run_static_tf_bridge)">
+        <include file="$(find tare_planner)/launch/include/_static_tf.launch">
+            <arg name="map_frame" value="$(arg map_frame)"/>
+            <arg name="camera_init_frame" value="$(arg camera_init_frame)"/>
+            <arg name="body_frame" value="$(arg body_frame)"/>
+            <arg name="sensor_frame" value="$(arg sensor_frame)"/>
+            <arg name="vehicle_frame" value="$(arg vehicle_frame)"/>
+            <arg name="base_frame" value="$(arg base_frame)"/>
+            <arg name="map_to_camera_init_yaw" value="$(arg map_to_camera_init_yaw)"/>
+            <arg name="sensor_to_vehicle_yaw" value="$(arg sensor_to_vehicle_yaw)"/>
+        </include>
+    </group>
+
+    <group if="$(arg run_navigation_boundary)">
+        <include file="$(find tare_planner)/launch/include/_navigation_boundary.launch">
+            <arg name="navigation_boundary_file" value="$(arg navigation_boundary_file)"/>
+        </include>
+    </group>
+
+    <!-- ======================== 5. 主链路 ======================== -->
+
+    <group if="$(arg run_uav_local_planner)">
+        <include file="$(find tare_planner)/launch/include/_uav_local_planner.launch">
+            <arg name="map_frame" value="$(arg map_frame)"/>
+            <arg name="odometry_topic" value="$(arg tare_odom_topic)"/>
+            <arg name="raw_waypoint_topic" value="$(arg local_planner_waypoint_topic)"/>
+            <arg name="reference_path_topic" value="$(arg local_planner_reference_path_topic)"/>
+            <arg name="collision_cloud_topic" value="$(arg tare_collision_cloud_topic)"/>
+            <arg name="registered_scan_topic" value="$(arg tare_cloud_topic)"/>
+            <arg name="safe_waypoint_topic" value="$(arg safe_waypoint_topic)"/>
+            <arg name="safe_path_topic" value="$(arg rviz_path_topic)"/>
+            <arg name="lookahead_distance" value="$(arg local_path_lookahead)"/>
+            <arg name="obstacle_range" value="$(arg local_obstacle_range)"/>
+            <arg name="horizontal_clearance" value="$(arg uav_horizontal_clearance)"/>
+            <arg name="vertical_clearance" value="$(arg uav_vertical_clearance)"/>
+            <arg name="reaction_time" value="$(arg local_reaction_time)"/>
+            <arg name="max_deceleration" value="$(arg local_max_deceleration)"/>
+            <arg name="candidate_angle_step_degrees" value="$(arg local_candidate_angle_step_degrees)"/>
+            <arg name="candidate_angle_count" value="$(arg local_candidate_angle_count)"/>
+            <arg name="vehicle_length" value="$(arg vehicle_length)"/>
+            <arg name="vehicle_width" value="$(arg vehicle_width)"/>
+            <arg name="vehicle_height" value="$(arg vehicle_height)"/>
+            <arg name="vehicle_mass" value="$(arg vehicle_mass)"/>
+        </include>
+    </group>
+
+    <group if="$(arg run_pose_bridge)">
+        <include file="$(find tare_planner)/launch/include/_pose_bridge.launch">
+            <arg name="map_frame" value="$(arg map_frame)"/>
+            <arg name="mavros_namespace" value="$(arg mavros_namespace)"/>
+            <arg name="uav_pose_topic" value="$(arg uav_pose_topic)"/>
+            <arg name="external_odom_topic" value="$(arg external_odom_topic)"/>
+            <!-- 有局部规划器时接安全航点，否则直连 TARE 航点 -->
+            <arg name="input_waypoint_topic"
+                 value="$(eval arg('safe_waypoint_topic') if arg('run_uav_local_planner') else arg('waypoint_topic'))"/>
+            <arg name="fixed_flight_height" value="$(arg fixed_flight_height)"/>
+            <arg name="fixed_flight_height_relative_to_start"
+                 value="$(arg fixed_flight_height_relative_to_start)"/>
+            <arg name="max_xy_speed" value="$(arg max_xy_speed)"/>
+            <arg name="max_z_speed" value="$(arg max_z_speed)"/>
+            <arg name="max_xy_accel" value="$(arg max_xy_accel)"/>
+            <arg name="max_z_accel" value="$(arg max_z_accel)"/>
+            <arg name="max_xy_jerk" value="$(arg max_xy_jerk)"/>
+            <arg name="max_z_jerk" value="$(arg max_z_jerk)"/>
+            <arg name="max_yaw_rate" value="$(arg max_yaw_rate)"/>
+            <arg name="heading_alignment_enabled" value="$(arg heading_alignment_enabled)"/>
+            <arg name="heading_alignment_tolerance" value="$(arg heading_alignment_tolerance)"/>
+            <arg name="takeoff_stabilization_seconds" value="$(arg takeoff_stabilization_seconds)"/>
+            <arg name="start_exploration_after_takeoff" value="$(arg start_exploration_after_takeoff)"/>
+            <arg name="rc_override_enabled" value="$(arg rc_override_enabled)"/>
+            <arg name="rc_override_channel" value="$(arg rc_override_channel)"/>
+            <arg name="rc_override_pwm" value="$(arg rc_override_pwm)"/>
+            <arg name="safety_geofence" value="$(arg safety_geofence)"/>
+            <arg name="safety_geofence_file" value="$(arg safety_geofence_file)"/>
+        </include>
+    </group>
+
+    <group if="$(arg run_offboard_manager)">
+        <include file="$(find tare_planner)/launch/include/_offboard.launch">
+            <arg name="mavros_namespace" value="$(arg mavros_namespace)"/>
+            <arg name="uav_pose_topic" value="$(arg uav_pose_topic)"/>
+            <arg name="external_odom_topic" value="$(arg external_odom_topic)"/>
+            <arg name="auto_arm" value="$(arg auto_arm)"/>
+            <arg name="offboard_mode" value="$(arg offboard_mode)"/>
+        </include>
+    </group>
+
+    <group if="$(arg run_tare_planner)">
+        <include file="$(find tare_planner)/launch/include/_tare_planner.launch">
+            <arg name="tare_odom_topic" value="$(arg tare_odom_topic)"/>
+            <arg name="tare_cloud_topic" value="$(arg tare_cloud_topic)"/>
+            <arg name="waypoint_topic" value="$(arg waypoint_topic)"/>
+            <arg name="fixed_start_goal_topic" value="$(arg fixed_start_goal_topic)"/>
+            <arg name="tare_sensor_range" value="$(arg tare_sensor_range)"/>
+            <arg name="fixed_flight_height" value="$(arg fixed_flight_height)"/>
+            <arg name="fixed_flight_height_relative_to_start"
+                 value="$(arg fixed_flight_height_relative_to_start)"/>
+            <arg name="uav_horizontal_clearance" value="$(arg uav_horizontal_clearance)"/>
+            <arg name="uav_vertical_clearance" value="$(arg uav_vertical_clearance)"/>
+            <arg name="manual_goal_topic" value="$(arg manual_goal_topic)"/>
+            <arg name="enable_manual_goal_navigation" value="$(arg enable_manual_goal_navigation)"/>
+            <arg name="manual_goal_arrival_radius" value="$(arg manual_goal_arrival_radius)"/>
+            <arg name="manual_goal_max_graph_distance" value="$(arg manual_goal_max_graph_distance)"/>
+            <arg name="exploration_completion_confirm_seconds"
+                 value="$(arg exploration_completion_confirm_seconds)"/>
+        </include>
+    </group>
+
+    <!-- ======================== 6. 可视化与录包 ======================== -->
+
+    <group if="$(arg rviz)">
+        <include file="$(find tare_planner)/launch/include/_rviz.launch">
+            <arg name="rviz_config" value="$(arg rviz_config)"/>
+            <arg name="rviz_path_compatibility" value="$(arg rviz_path_compatibility)"/>
+            <arg name="run_uav_local_planner" value="$(arg run_uav_local_planner)"/>
+            <arg name="tare_global_path_topic" value="$(arg tare_global_path_topic)"/>
+            <arg name="rviz_path_topic" value="$(arg rviz_path_topic)"/>
+        </include>
+    </group>
+
+    <group if="$(arg rosbag_record)">
+        <include file="$(find tare_planner)/launch/record_bag.launch">
+            <arg name="bag_path" value="$(arg bag_path)"/>
+            <arg name="bag_name_prefix" value="$(arg bag_name_prefix)"/>
+        </include>
+    </group>
+</launch>

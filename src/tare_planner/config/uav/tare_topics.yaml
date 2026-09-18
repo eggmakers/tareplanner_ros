@@ -1,0 +1,44 @@
+# TARE 节点 —— 话题接线（唯一真源）
+#
+# 加载位置: launch/include/_tare_planner.launch
+# 命令行覆盖: roslaunch 时用同名 arg，例如 waypoint_topic:=/xxx
+#             （arg 为空时用本文件的值）
+#
+# 注意: 本文件只放"接线"类参数。修改话题名请优先改这里，不要改 launch。
+
+# ---- 订阅 ----
+sub_start_exploration_topic_: /start_exploration
+sub_state_estimation_topic_: /state_estimation
+sub_registered_scan_topic_: /registered_scan
+sub_terrain_map_topic_: /terrain_map
+sub_terrain_map_ext_topic_: /terrain_map_ext
+sub_coverage_boundary_topic_: /sensor_coverage_planner/coverage_boundary
+sub_viewpoint_boundary_topic_: /navigation_boundary
+sub_nogo_boundary_topic_: /sensor_coverage_planner/nogo_boundary
+sub_joystick_topic_: /joy
+sub_reset_waypoint_topic_: /reset_waypoint
+
+# ---- 订阅: UAV 任务控制 ----
+sub_manual_goal_topic_: /move_base_simple/goal
+sub_fixed_start_goal_topic_: /tare_uav/fixed_start_goal
+sub_pause_mission_topic_: /tare_uav/mission/pause
+sub_resume_exploration_topic_: /tare_uav/mission/resume_exploration
+sub_cancel_navigation_topic_: /tare_uav/navigation/cancel
+
+# ---- 发布 ----
+pub_waypoint_topic_: /way_point
+pub_runtime_topic_: /runtime
+pub_runtime_breakdown_topic_: runtime_breakdown
+pub_exploration_finish_topic_: exploration_finish
+pub_momentum_activation_count_topic_: momentum_activation_count
+
+# ---- 发布: UAV 任务状态与路径 ----
+pub_manual_navigation_path_topic_: /tare_uav/navigation/path
+pub_manual_navigation_goal_topic_: /tare_uav/navigation/goal
+pub_mission_mode_topic_: /tare_uav/mission/mode
+pub_navigation_active_topic_: /tare_uav/navigation/active
+pub_navigation_reached_topic_: /tare_uav/navigation/reached
+pub_fixed_start_path_topic_: /tare_uav/fixed_start_path
+pub_fixed_start_goal_topic_: /tare_uav/fixed_start_goal_accepted
+pub_fixed_start_status_topic_: /tare_uav/fixed_start_status
+pub_exploration_start_pose_topic_: /tare_uav/exploration_start_pose
