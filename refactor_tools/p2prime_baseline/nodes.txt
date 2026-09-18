@@ -1,9 +1,0 @@
-/sensor_coverage_planner/tare_planner_node
-/tare_planner_uav_rviz
-/uav_local_planner
-/uav_mission_mux
-/uav_path_exporter
-/uav_path_replayer
-/uav_registered_scan_relay
-/uav_state_estimation_relay
-/uav_waypoint_bridge

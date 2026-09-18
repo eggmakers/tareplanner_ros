@@ -203,10 +203,10 @@ cd /home/l/tare_planner/src/tare_planner
 # 5) 编译
 cd /home/l/tare_planner && catkin_make
 
-# 6) 解析快照 vs 基线（nodes / params 必须与 baseline 完全一致）
-bash refactor_tools/snapshot_launch.sh after_merge
-diff refactor_tools/baseline/nodes.txt   refactor_tools/after_merge/nodes.txt
-diff refactor_tools/baseline/params.txt  refactor_tools/after_merge/params.txt
+# 6) 解析结果必须与重构后基线一致：节点 10 个、参数 215 个
+#    把你那条 roslaunch 命令的 28 个参数原样接到下面两条命令后面
+roslaunch --nodes       tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 应为 10
+roslaunch --dump-params tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 应为 215
 
 # 7) profile 测试
 cd /home/l/tare_planner/src/tare_planner && source /opt/ros/noetic/setup.bash
@@ -219,7 +219,10 @@ python3 test/test_uav_offboard_manager.py
 roslaunch tare_planner tare_uav_fixed_height.launch <28 个参数原样>
 ```
 
-`refactor_tools/baseline/` 就是为这件事存在的，**不要删**。
+> 说明：原先的 `refactor_tools/`（`snapshot_launch.sh` + `baseline/` 快照）已删除，
+> 以保持仓库干净。它仍在 git 历史里，随时可取回：
+> `git checkout 4836397 -- refactor_tools`，取回后即可恢复
+> `bash refactor_tools/snapshot_launch.sh after_merge` + `diff` 的完整流程。
 
 ---
 

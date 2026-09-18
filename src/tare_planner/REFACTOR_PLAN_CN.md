@@ -12,7 +12,7 @@
 
 | 阶段 | commit | 结果 |
 |---|---|---|
-| P0 基线 | `4836397` | 建分支；自研文件纳入版本控制；`refactor_tools/baseline/` 存档重构前解析快照（nodes 10 / params 215 / args 128） |
+| P0 基线 | `4836397` | 建分支；自研文件纳入版本控制；`refactor_tools/baseline/` 存档重构前解析快照（nodes 10 / params 215 / args 128）〔该目录后已删除，见文末附注〕 |
 | P1 清理 | `afa307f` | 删除 13 个文件（wheeltec/CMU 桥、wheeltec GUI、6 个 AirSim 脚本、2 个 AirSim 测试、2 个垃圾 config）；CMake 去样板 + 去死路径；`catkin_make` 0 error |
 | P2 launch 解耦 | `6d9342d` | 参数下沉到 `config/uav/`（6 个文件，228 键）；新增 `launch/include/_*.launch`（8 个）；主 launch 357→~290 行但**零默认值重复**；删除孤儿 `config/uav_fixed_height.yaml` |
 | 文档 | `10bbfa5` | 把 P0~P2 的执行记录与偏差写回本文档 |
@@ -47,8 +47,8 @@
 ```bash
 cd ~/tare_planner
 source /opt/ros/noetic/setup.bash && source devel/setup.bash
-bash refactor_tools/snapshot_launch.sh after_p2
-diff refactor_tools/baseline/params.txt refactor_tools/after_p2/params.txt   # 应为空
+roslaunch --nodes       tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 应为 10
+roslaunch --dump-params tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 应为 215
 ```
 
 ### 与本文档原方案的偏差（有意为之）
@@ -434,3 +434,35 @@ flowchart LR
 4. 记录 `rosnode list` / `rostopic list` 基线
 
 P0 不改任何代码，完成后我会停下来等你确认再进 P1。
+
+---
+
+## 附注：refactor_tools 已删除
+
+重构期间在工作区根目录建过一个 `refactor_tools/`，用于抓 `roslaunch` 的解析快照
+（节点 / 参数 / 文件 / args）并在重构前后做 diff。重构收尾时已整体删除，以保持
+仓库干净。
+
+**它没有被"销毁"**：仍在 git 历史里，随时可取回 ——
+
+```bash
+git checkout 4836397 -- refactor_tools    # 4836397 是 P0，创建该目录的提交
+```
+
+取回后即可恢复完整流程：
+
+```bash
+bash refactor_tools/snapshot_launch.sh after_merge
+diff refactor_tools/baseline/nodes.txt  refactor_tools/after_merge/nodes.txt
+diff refactor_tools/baseline/params.txt refactor_tools/after_merge/params.txt
+```
+
+**丢掉它意味着什么**：以后改动 `launch/` 或 `config/uav/*.yaml` 之后，就没有自动手段
+再证明"那条 28 参数命令仍解析出同样的 10 节点 / 215 参数"了，只剩下面这两条计数命令：
+
+```bash
+roslaunch --nodes       tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 10
+roslaunch --dump-params tare_planner tare_uav_fixed_height.launch <参数> | sort | wc -l   # 215
+```
+
+结论仍然是：**改动 launch/config 前建议先 `git checkout 4836397 -- refactor_tools` 把工具取回**。

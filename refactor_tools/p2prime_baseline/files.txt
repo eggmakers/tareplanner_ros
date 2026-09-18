@@ -1,7 +1,0 @@
-/home/l/tare_planner/src/tare_planner/launch/include/_input_bridge.launch
-/home/l/tare_planner/src/tare_planner/launch/include/_pose_bridge.launch
-/home/l/tare_planner/src/tare_planner/launch/include/_rviz.launch
-/home/l/tare_planner/src/tare_planner/launch/include/_tare_planner.launch
-/home/l/tare_planner/src/tare_planner/launch/include/_uav_local_planner.launch
-/home/l/tare_planner/src/tare_planner/launch/tare_uav_fixed_height.launch
-/home/l/tare_planner/src/tare_planner/launch/tare_uav_integrated_mission.launch
